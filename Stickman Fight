@@ -1,237 +1,208 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stickman Duel — 2 Player</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stickman Duel — Multi Arena</title>
 <style>
-:root{
-  --bg:#0f1724; --panel:#0b1220; --accent:#7dd3fc; --accent-2:#a78bfa; --muted:#94a3b8;
-  --hp-bg:#243244; --hp-win:#34d399;
-  font-family: Inter, system-ui, sans-serif;
-}
-html,body{height:100%;margin:0;background:var(--bg);color:#e6eef8;}
-.wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px;padding:24px;}
-.ui{width:min(1000px,96vw);display:flex;justify-content:space-between;align-items:center;gap:16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);padding:12px;border-radius:14px;}
-.player-panel{width:48%;display:flex;align-items:center;gap:12px;}
-.hp{flex:1;background:var(--hp-bg);border-radius:10px;height:14px;overflow:hidden;position:relative;}
-.hp .bar{height:100%;width:100%;background:linear-gradient(90deg,var(--hp-win),var(--accent));transition:width .22s linear;}
-.hp .label{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:11px;color:var(--muted);}
-.names{font-size:13px;color:var(--muted);font-weight:600;}
-.center-controls{display:flex;flex-direction:column;align-items:center;gap:6px;}
-button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:10px;color:var(--muted);cursor:pointer;}
-button:hover{border-color:rgba(255,255,255,0.12);color:var(--accent);}
-canvas{display:block;width:min(1000px,96vw);height:520px;border-radius:12px;background:#000;box-shadow:0 20px 50px rgba(2,6,23,0.6);}
-.instructions{max-width:1000px;color:var(--muted);font-size:13px;text-align:center;}
-.overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,0.6);z-index:20;}
-.card{background:var(--panel);padding:20px;border-radius:14px;border:1px solid rgba(255,255,255,0.04);text-align:center;max-width:560px;color:#dbeafe;}
-.title{font-size:20px;margin-bottom:8px;}
-.small{font-size:13px;color:var(--muted);margin-bottom:12px;}
-.footer{font-size:12px;color:var(--muted);margin-top:10px;}
+body{margin:0;overflow:hidden;background:#000;font-family:sans-serif;}
+canvas{display:block;}
+#ui{position:absolute;top:10px;width:100%;display:flex;justify-content:space-between;padding:0 20px;color:white;font-weight:bold;}
+.hp-bar{width:200px;height:20px;background:#444;border:2px solid #222;position:relative;}
+.hp-fill{height:100%;background:#0f0;width:100%;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:20;}
+.card{background:#111;padding:20px;border-radius:14px;color:#fff;text-align:center;}
+button{margin:5px;padding:10px 16px;border:none;border-radius:10px;background:#333;color:#fff;cursor:pointer;}
+button:hover{background:#555;}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="ui">
-    <div class="player-panel">
-      <div class="names">Player 1 — WASD + Shift Kick</div>
-      <div class="hp" id="hp1"><div class="bar" id="bar1"></div><div class="label" id="label1">100%</div></div>
-    </div>
-    <div class="center-controls">
-      <div style="font-weight:700; color:var(--muted);">Stickman Duel</div>
-      <div style="display:flex;gap:8px;">
-        <button id="restart">Restart</button>
-        <button id="toggleSound">Toggle Sound</button>
-      </div>
-    </div>
-    <div class="player-panel" style="justify-content:flex-end;">
-      <div class="hp" id="hp2"><div class="bar" id="bar2" style="background:linear-gradient(90deg,var(--accent-2),#f472b6)"></div><div class="label" id="label2">100%</div></div>
-      <div class="names" style="text-align:right;">Player 2 — Arrows + Shift Kick</div>
-    </div>
-  </div>
-  <canvas id="game" width="1200" height="520"></canvas>
-  <div class="instructions">Choose an arena and fight! Player 1: W A D + S + Shift Kick · Player 2: ↑ ← → + ↓ + Shift Kick</div>
+<div id="ui">
+<div>Player1 <div class="hp-bar"><div class="hp-fill" id="p1hp"></div></div></div>
+<div>Player2 <div class="hp-bar"><div class="hp-fill" id="p2hp"></div></div></div>
 </div>
+<canvas id="c" width="1200" height="520"></canvas>
 
 <div id="overlay" class="overlay">
   <div class="card">
-    <div class="title">Stickman Duel</div>
-    <div class="small">Choose your battleground</div>
-    <div id="arenaSelect" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:10px;">
-      <button id="arenaGrasslands">🌿 Grasslands</button>
-      <button id="arenaSahara">🏜️ Sahara</button>
-      <button id="arenaRainyForest">🌧️ Rainy Forest</button>
-      <button id="arenaDryland">🏞️ Dryland</button>
-    </div>
-    <div style="display:flex;gap:8px;justify-content:center;">
-      <button id="demoBtn">Demo (AI vs AI)</button>
-    </div>
-    <div class="footer">All by <strong>aboodicoder</strong></div>
+    <h2>Choose Arena</h2>
+    <button id="arenaGrasslands">🌿 Grasslands</button>
+    <button id="arenaSahara">🏜️ Sahara</button>
+    <button id="arenaRainyForest">🌧️ Rainy Forest</button>
+    <button id="arenaDryland">🏞️ Dryland</button>
+    <div style="margin-top:10px;font-size:12px;">All by <strong>aboodicoder</strong></div>
   </div>
 </div>
 
 <script>
-const canvas=document.getElementById('game'),ctx=canvas.getContext('2d',{alpha:false});
-let cw=canvas.width,ch=canvas.height;
-const groundY=ch-80,leftBound=80,rightBound=cw-80;
-function resize(){cw=canvas.width=1200;ch=canvas.height=520;}resize();
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const cw=canvas.width,ch=canvas.height;
+const groundY=ch-80;
 
-const arenas={
-  grasslands:{sky:"#bde0a8",ground:"#6aa84f",effect:"grass"},
-  sahara:{sky:"#f9e79f",ground:"#f1c40f",effect:"dust"},
-  rainyforest:{sky:"#6ab04c",ground:"#145a32",effect:"rain"},
-  dryland:{sky:"#f7e7ce",ground:"#a67b5b",effect:"hill"}
-};
-let currentArena="grasslands";
-let particles=[],clouds=[],trees=[],desertBalls=[],pond={x:500,y:groundY-20,width:200,height:40};
-
+// --- Player Class ---
 class Player{
-  constructor(x,color,facing=1){
-    this.x=x;this.y=0;this.vx=0;this.vy=0;this.width=36;this.height=70;
-    this.onGround=false;this.health=100;this.color=color;this.facing=facing;
-    this.punching=false;this.punchTimer=0;this.stun=0;this.inPondTime=0;this.bubbles=[];
+  constructor(x,color,facing){
+    this.x=x;this.y=groundY;this.vx=0;this.vy=0;
+    this.width=36;this.height=70;
+    this.color=color;this.facing=facing;
+    this.onGround=true;this.health=100;
+    this.punch=false;this.punchTimer=0;
+    this.kick=false;this.kickTimer=0;
+    this.inPondTime=0;this.bubbles=[];
   }
   rect(){return {x:this.x-this.width/2,y:this.y-this.height,w:this.width,h:this.height};}
-  punchHitbox(){const r=38,px=this.x+this.facing*(this.width/2+r/2),py=this.y-this.height/2;return {x:px-r/2,y:py-16,w:r,h:32};}
+  punchBox(){return {x:this.x+this.facing*30-15,y:this.y-45,w:30,h:20};}
+  kickBox(){return {x:this.x+this.facing*35-15,y:this.y-40,w:35,h:25};}
 }
+const p1=new Player(360,'#0ff',1);
+const p2=new Player(840,'#f0f',-1);
 
-const p1=new Player(360,'#7dd3fc',1);
-const p2=new Player(840,'#f472b6',-1);
-let keys={},running=false;
+// --- Input ---
+const keys={};
 window.addEventListener('keydown',e=>keys[e.code]=true);
 window.addEventListener('keyup',e=>keys[e.code]=false);
 
-/* ======= Audio ======= */
-const AudioEnabled={val:true};
-const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-function playTone(freq,type='sine',len=0.12,gain=0.12){
-  if(!AudioEnabled.val)return;
-  const o=audioCtx.createOscillator(),v=audioCtx.createGain(),t=audioCtx.currentTime;
-  o.type=type;o.frequency.value=freq;v.gain.value=gain;o.connect(v);v.connect(audioCtx.destination);
-  o.start(t);v.gain.exponentialRampToValueAtTime(0.0001,t+len);o.stop(t+len);
+// --- Arena Data ---
+let currentArena='grasslands';
+const pond={x:500,y:groundY,width:200,height:50};
+let trees=[],clouds=[],desertBalls=[],rainDrops=[];
+function setupArena(arena){
+  trees=[];clouds=[];desertBalls=[];rainDrops=[];
+  if(arena==='grasslands'){for(let i=0;i<5;i++){trees.push({x:100+Math.random()*1000});}
+  for(let i=0;i<3;i++){clouds.push({x:50+Math.random()*1100,y:50+Math.random()*50});}}
+  if(arena==='sahara'){for(let i=0;i<5;i++){desertBalls.push({x:Math.random()*1200,y:groundY-20});}}
+  if(arena==='rainyforest'){for(let i=0;i<100;i++){rainDrops.push({x:Math.random()*cw,y:Math.random()*ch,vy:200+Math.random()*100});}}
 }
-function playPunchSound(){playTone(600,'square',0.08,0.09);}
-function playHitSound(){playTone(180,'sine',0.18,0.15);}
-function playWinSound(){playTone(880,'triangle',0.28,0.14);}
-function playKickSound(){playTone(480,'square',0.08,0.08);}
 
-/* ======= Kick cooldown ======= */
-let lastKickP1=0,lastKickP2=0,kickCooldown=0.2;
+// --- Sounds ---
+function playTone(freq,dur){try{const ac=new (window.AudioContext||window.webkitAudioContext)(); const osc=ac.createOscillator(); const gain=ac.createGain(); osc.connect(gain); gain.connect(ac.destination); osc.frequency.value=freq; osc.start(); osc.stop(ac.currentTime+dur);}catch(e){}}
+function punchSound(){playTone(600,0.08);}
+function kickSound(){playTone(480,0.08);}
+function hitSound(){playTone(180,0.1);}
+function winSound(){playTone(880,0.2);}
 
-/* ======= Physics ======= */
-function applyPhysics(dt,p){
-  const g=1400;p.vy+=g*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;
+// --- Physics ---
+function applyPhysics(p,dt){
+  const g=1400;
+  p.vy+=g*dt; p.x+=p.vx*dt; p.y+=p.vy*dt;
   if(p.y>groundY){p.y=groundY;p.vy=0;p.onGround=true;}else p.onGround=false;
-  if(p.x<leftBound)p.x=leftBound;if(p.x>rightBound)p.x=rightBound;
+  p.vx*=0.88;
   // Dryland hill
-  if(currentArena==='dryland'){
-    let hillX=cw/2,hWidth=200,hHeight=50;
+  if(currentArena==='dryland'){let hillX=cw/2,hWidth=200,hHeight=50;
     if(p.x>hillX-hWidth/2 && p.x<hillX+hWidth/2){
       let hillTop=groundY-hHeight*Math.sin((p.x-(hillX-hWidth/2))/hWidth*Math.PI);
       if(p.y>hillTop)p.y=hillTop;
     }
   }
-  if(p.onGround)p.vx*=0.88;
+  // Pond sinking
+  if(currentArena==='grasslands' && p.x>pond.x && p.x<pond.x+pond.width && p.y>groundY-10)p.y=groundY-10;
 }
 
-/* ======= Combat ======= */
-function rectInt(a,b){return !(a.x+a.w<b.x || a.x>b.x+b.w || a.y+a.h<b.y || a.y>b.y+b.h);}
-function resolvePunch(a,b){if(a.punching && a.punchTimer>0.06){const h=a.punchHitbox(),r=b.rect();if(rectInt(h,r)&&b.stun<=0){b.health=Math.max(0,b.health-10);b.vx=a.facing*220;b.vy=-140;b.stun=0.26;playHitSound();}}}
-function resolveKick(a,b){const now=performance.now()/1000;if(a===p1){if(now-lastKickP1<kickCooldown)return;lastKickP1=now;}else{if(now-lastKickP2<kickCooldown)return;lastKickP2=now;};const r=b.rect();const hit={x:a.x+a.facing*30,y:a.y-35,w:30,h:20};if(rectInt(hit,r)){b.health=Math.max(0,b.health-10);b.vx=a.facing*220;b.vy=-140;playKickSound();}}
+// --- Combat ---
+function rectOverlap(a,b){return !(a.x+a.w<b.x || a.x>b.x+b.w || a.y+a.h<b.y || a.y>b.y+b.h);}
+function doPunch(a,b){if(a.punch && a.punchTimer>0.05){if(rectOverlap(a.punchBox(),b.rect())){b.health=Math.max(0,b.health-10);b.vx=a.facing*200;b.vy=-140;hitSound();}}}
+function doKick(a,b){if(a.kick && a.kickTimer>0.05){if(rectOverlap(a.kickBox(),b.rect())){b.health=Math.max(0,b.health-10);b.vx=a.facing*200;b.vy=-140;hitSound();}}}
 
-/* ======= Pond Damage/Bubbles ======= */
-function checkPondDamage(p,dt){
-  if(currentArena!=='grasslands')return;
-  if(p.x>pond.x && p.x<pond.x+pond.width && p.y>pond.y-10){p.inPondTime+=dt;
-    if(p.bubbles.length<3 && Math.floor(p.inPondTime)>p.bubbles.length)p.bubbles.push({time:0});
-    if(p.inPondTime>3)p.health-=dt*10;
-  }else{p.inPondTime=0;p.bubbles=[];}
+// --- Update ---
+function update(dt){
+  // Input
+  if(keys['KeyA']){p1.vx=-200;p1.facing=-1;}
+  if(keys['KeyD']){p1.vx=200;p1.facing=1;}
+  if(keys['KeyW'] && p1.onGround){p1.vy=-450;p1.onGround=false;}
+  if(keys['KeyS'] && !p1.punch){p1.punch=true;p1.punchTimer=0;punchSound();}
+  if(keys['ShiftLeft'] && !p1.kick){p1.kick=true;p1.kickTimer=0;kickSound();}
+
+  if(keys['ArrowLeft']){p2.vx=-200;p2.facing=-1;}
+  if(keys['ArrowRight']){p2.vx=200;p2.facing=1;}
+  if(keys['ArrowUp'] && p2.onGround){p2.vy=-450;p2.onGround=false;}
+  if(keys['ArrowDown'] && !p2.punch){p2.punch=true;p2.punchTimer=0;punchSound();}
+  if(keys['ShiftRight'] && !p2.kick){p2.kick=true;p2.kickTimer=0;kickSound();}
+
+  applyPhysics(p1,dt); applyPhysics(p2,dt);
+
+  // Pond bubbles & damage
+  [p1,p2].forEach(p=>{
+    if(currentArena==='grasslands' && p.x>pond.x && p.x<pond.x+pond.width && p.y>groundY-10){
+      p.inPondTime+=dt;
+      if(p.bubbles.length<3 && Math.floor(p.inPondTime)>p.bubbles.length)p.bubbles.push({});
+      if(p.inPondTime>3)p.health=Math.max(0,p.health-10*dt);
+    } else {p.inPondTime=0;p.bubbles=[];}
+  });
+
+  // Punch/Kick
+  doPunch(p1,p2); doPunch(p2,p1);
+  doKick(p1,p2); doKick(p2,p1);
+
+  // Timers
+  if(p1.punch){p1.punchTimer+=dt;if(p1.punchTimer>0.25)p1.punch=false;}
+  if(p1.kick){p1.kickTimer+=dt;if(p1.kickTimer>0.25)p1.kick=false;}
+  if(p2.punch){p2.punchTimer+=dt;if(p2.punchTimer>0.25)p2.punch=false;}
+  if(p2.kick){p2.kickTimer+=dt;if(p2.kickTimer>0.25)p2.kick=false;}
+
+  // Update UI
+  document.getElementById('p1hp').style.width=p1.health+'%';
+  document.getElementById('p2hp').style.width=p2.health+'%';
+
+  // Win check
+  if(p1.health<=0 || p2.health<=0){winSound();running=false;}
 }
 
-/* ======= Render ======= */
-const bar1=document.getElementById('bar1'),bar2=document.getElementById('bar2');
-const label1=document.getElementById('label1'),label2=document.getElementById('label2');
-function updateUI(){bar1.style.width=p1.health+'%';bar2.style.width=p2.health+'%';label1.textContent=Math.round(p1.health)+'%';label2.textContent=Math.round(p2.health)+'%';}
-function drawStickman(p){
-  ctx.strokeStyle=p.color;ctx.lineWidth=3;
-  const headY=p.y-p.height+14;
-  // Head
-  ctx.beginPath();ctx.arc(p.x,headY,12,0,Math.PI*2);ctx.stroke();
-  // Body
-  ctx.beginPath();ctx.moveTo(p.x,headY+14);ctx.lineTo(p.x,p.y-18);ctx.stroke();
-  // Legs
-  ctx.beginPath();ctx.moveTo(p.x,p.y-18);ctx.lineTo(p.x-14,p.y);ctx.moveTo(p.x,p.y-18);ctx.lineTo(p.x+18,p.y);ctx.stroke();
-  // Arms swing
-  let armSwing=Math.sin(Date.now()/200)*10;
-  const armLen=28; const aX=p.x+p.facing*armLen; ctx.beginPath();
-  ctx.moveTo(p.x,headY+16);ctx.lineTo(aX,headY+28+armSwing);ctx.stroke();
-  // Pond bubbles
-  p.bubbles.forEach((b,i)=>{ctx.fillStyle='rgba(173,216,230,0.8)';ctx.beginPath();
-    ctx.arc(p.x,p.y-p.height-10-i*12,6,0,Math.PI*2);ctx.fill();
+// --- Draw ---
+function draw(){
+  ctx.clearRect(0,0,cw,ch);
+  // Background
+  if(currentArena==='grasslands'){ctx.fillStyle="#87ceeb";ctx.fillRect(0,0,cw,ch);}
+  if(currentArena==='sahara'){ctx.fillStyle="#f9e79f";ctx.fillRect(0,0,cw,ch);}
+  if(currentArena==='rainyforest'){ctx.fillStyle="#3a5f0b";ctx.fillRect(0,0,cw,ch);}
+  if(currentArena==='dryland'){ctx.fillStyle="#d8c19f";ctx.fillRect(0,0,cw,ch);}
+
+  // Clouds
+  if(currentArena==='grasslands'){
+    clouds.forEach(c=>{ctx.fillStyle="white";ctx.beginPath();ctx.arc(c.x,c.y,20,0,2*Math.PI);ctx.fill();c.x+=10/60;if(c.x>cw)c.x=-50;});
+  }
+
+  // Ground
+  ctx.fillStyle=currentArena==='sahara'?'#f1c40f':currentArena==='rainyforest'?'#145a32':'#6aa84f';
+  ctx.fillRect(0,groundY,cw,ch-groundY);
+
+  // Pond
+  if(currentArena==='grasslands'){ctx.fillStyle="#1e90ff";ctx.fillRect(pond.x,groundY-pond.height,pond.width,pond.height);}
+  // Trees
+  if(currentArena==='grasslands'){trees.forEach(t=>{ctx.fillStyle="#8b4513";ctx.fillRect(t.x,groundY-50,10,50);ctx.fillStyle="#228b22";ctx.beginPath();ctx.moveTo(t.x-15,groundY-50);ctx.lineTo(t.x+25,groundY-50);ctx.lineTo(t.x+5,groundY-90);ctx.closePath();ctx.fill();});}
+  // Sahara balls
+  if(currentArena==='sahara'){desertBalls.forEach(b=>{ctx.fillStyle="#deb887";ctx.beginPath();ctx.arc(b.x,b.y,20,0,Math.PI*2);ctx.fill();b.x+=60/60;if(b.x>cw)b.x=-20;});}
+  // Rain
+  if(currentArena==='rainyforest'){rainDrops.forEach(r=>{ctx.strokeStyle="#0cf";ctx.beginPath();ctx.moveTo(r.x,r.y);ctx.lineTo(r.x,r.y+5);ctx.stroke();r.y+=r.vy/60;if(r.y>ch)r.y=-10;});}
+  // Dryland hill
+  if(currentArena==='dryland'){ctx.fillStyle="#a67b5b";ctx.beginPath();const hillX=cw/2,hWidth=200,hHeight=50;for(let i=0;i<=hWidth;i++){let x=hillX-hWidth/2+i,y=groundY-hHeight*Math.sin(i/hWidth*Math.PI);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}ctx.lineTo(cw/2+hWidth/2,groundY);ctx.lineTo(cw/2-hWidth/2,groundY);ctx.fill();}
+
+  // Players
+  [p1,p2].forEach(p=>{
+    ctx.strokeStyle=p.color;ctx.lineWidth=3;
+    let headY=p.y-p.height+14;
+    ctx.beginPath();ctx.arc(p.x,headY,12,0,2*Math.PI);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(p.x,headY+14);ctx.lineTo(p.x,p.y-18);ctx.stroke();
+    let legSwing=Math.sin(Date.now()/200)*5;
+    ctx.beginPath();ctx.moveTo(p.x,p.y-18);ctx.lineTo(p.x-14,p.y+legSwing);ctx.moveTo(p.x,p.y-18);ctx.lineTo(p.x+18,p.y-legSwing);ctx.stroke();
+    let armSwing=Math.sin(Date.now()/200)*10;
+    ctx.beginPath();ctx.moveTo(p.x,headY+16);ctx.lineTo(p.x+p.facing*28,headY+28+armSwing);ctx.stroke();
+    if(p.punch){ctx.beginPath();ctx.moveTo(p.x,headY+16);ctx.lineTo(p.x+p.facing*40,headY+28);ctx.stroke();}
+    if(p.kick){ctx.beginPath();ctx.moveTo(p.x,p.y-18);ctx.lineTo(p.x+p.facing*35,p.y-10);ctx.stroke();}
+    p.bubbles.forEach((b,i)=>{ctx.fillStyle='rgba(173,216,230,0.8)';ctx.beginPath();ctx.arc(p.x,p.y-p.height-10-i*12,6,0,2*Math.PI);ctx.fill();});
   });
 }
 
-/* ======= Input ======= */
-function handleInput(p,dt,left,right,jump,punch,kick){
-  if(p.stun>0)return;
-  if(keys[left]){p.vx-=1200*dt;p.facing=-1;}
-  if(keys[right]){p.vx+=1200*dt;p.facing=1;}
-  if(keys[jump]&&p.onGround){p.vy=-450;p.onGround=false;}
-  if(keys[punch]&&!p.punching){p.punching=true;p.punchTimer=0;playPunchSound();}
-  if(keys[kick])resolveKick(p,p===p1?p2:p1);
-}
+// --- Loop ---
+let running=true,last=0;
+function loop(ts){const dt=(ts-last)/1000; last=ts; if(running){update(dt);draw();requestAnimationFrame(loop);}}
+requestAnimationFrame(loop);
 
-/* ======= Update ======= */
-function update(p,dt,o){if(p.stun>0)p.stun=Math.max(0,p.stun-dt);if(p.punching){p.punchTimer+=dt;if(p.punchTimer>0.25){p.punching=false;p.punchTimer=0;}}resolvePunch(p,o);applyPhysics(dt,p);checkPondDamage(p,dt);}
-
-/* ======= Render loop ======= */
-function render(dt){
-  ctx.fillStyle=arenas[currentArena].sky;ctx.fillRect(0,0,cw,ch);
-  ctx.fillStyle=arenas[currentArena].ground;ctx.fillRect(0,groundY,cw,ch-groundY);
-  // Grasslands pond
-  if(currentArena==='grasslands'){
-    ctx.fillStyle='rgba(50,100,255,0.6)';ctx.beginPath();
-    ctx.ellipse(pond.x+pond.width/2,pond.y,pond.width/2,pond.height/2,0,0,Math.PI*2);ctx.fill();
-  }
-  // Dryland hill
-  if(currentArena==='dryland'){
-    ctx.fillStyle='#a67b5b';ctx.beginPath();
-    const hillX=cw/2,hWidth=200,hHeight=50;
-    for(let i=0;i<=hWidth;i++){
-      let x=hillX-hWidth/2+i,y=groundY-hHeight*Math.sin(i/hWidth*Math.PI);
-      if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
-    }ctx.lineTo(cw/2+hWidth/2,groundY);ctx.lineTo(cw/2-hWidth/2,groundY);ctx.fill();
-  }
-  drawStickman(p1);drawStickman(p2);updateUI();
-}
-
-/* ======= Game loop ======= */
-let last=performance.now();
-function loop(now){
-  if(!running)return;
-  const dt=Math.min(0.032,(now-last)/1000);last=now;
-  handleInput(p1,dt,'KeyA','KeyD','KeyW','KeyS','ShiftLeft');
-  handleInput(p2,dt,'ArrowLeft','ArrowRight','ArrowUp','ArrowDown','ShiftRight');
-  update(p1,dt,p2);update(p2,dt,p1);render(dt);
-  if(p1.health<=0||p2.health<=0){running=false;playWinSound();setTimeout(()=>showWin(p1.health<=0?'Player 2':'Player 1'),400);}
-  requestAnimationFrame(loop);
-}
-
-/* ======= Start/Restart ======= */
-function startGame(){
-  Object.assign(p1,{x:360,y:groundY,vx:0,vy:0,health:100,stun:0,punching:false,inPondTime:0,bubbles:[]});
-  Object.assign(p2,{x:840,y:groundY,vx:0,vy:0,health:100,stun:0,punching:false,inPondTime:0,bubbles:[]});
-  running=true;last=performance.now();requestAnimationFrame(loop);
-}
-document.getElementById('arenaGrasslands').onclick=()=>{currentArena='grasslands';overlay.style.display='none';startGame();}
-document.getElementById('arenaSahara').onclick=()=>{currentArena='sahara';overlay.style.display='none';startGame();}
-document.getElementById('arenaRainyForest').onclick=()=>{currentArena='rainyforest';overlay.style.display='none';startGame();}
-document.getElementById('arenaDryland').onclick=()=>{currentArena='dryland';overlay.style.display='none';startGame();}
-document.getElementById('restart').onclick=()=>{overlay.style.display='flex';}
-
-/* ======= Win Screen ======= */
-function showWin(w){overlay.style.display='flex';overlay.querySelector('.card').innerHTML=
-`<div class="title">${w} Wins!</div>
-<button onclick="location.reload()">Play Again</button>
-<div class="footer">All by <strong>aboodicoder</strong></div>`;}
-</script
+// --- Arena Buttons ---
+document.getElementById('arenaGrasslands').onclick=()=>{currentArena='grasslands';setupArena('grasslands');document.getElementById('overlay').style.display='none';};
+document.getElementById('arenaSahara').onclick=()=>{currentArena='sahara';setupArena('sahara');document.getElementById('overlay').style.display='none';};
+document.getElementById('arenaRainyForest').onclick=()=>{currentArena='rainyforest';setupArena('rainyforest');document.getElementById('overlay').style.display='none';};
+document.getElementById('arenaDryland').onclick=()=>{currentArena='dryland';setupArena('dryland');document.getElementById('overlay').style.display='none';};
+setupArena('grasslands');
+</script>
+</body>
+</html>
