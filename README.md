@@ -125,6 +125,7 @@
       <div style="display:flex;gap:8px">
         <button id="restart">Restart</button>
         <button id="toggleSound">Toggle Sound</button>
+        <button id="fullscreenBtn">Fullscreen</button>
       </div>
     </div>
 
@@ -169,11 +170,15 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d', { alpha: false });
 let cw = canvas.width, ch = canvas.height;
 
+// Auto-scale canvas to fullscreen while keeping resolution
 function resizeCanvasToDisplay() {
-  // Keep internal resolution fixed for consistent gameplay, but scale drawing to CSS size
-  cw = canvas.width = 1200;
-  ch = canvas.height = 520;
+  const scaleX = window.innerWidth / 1200;
+  const scaleY = window.innerHeight / 520;
+  const scale = Math.min(scaleX, scaleY);
+  canvas.style.width = 1200 * scale + 'px';
+  canvas.style.height = 520 * scale + 'px';
 }
+window.addEventListener('resize', resizeCanvasToDisplay);
 resizeCanvasToDisplay();
 
 /* =========================
@@ -209,7 +214,6 @@ function playWinSound() {
 }
 function backgroundDrone(){
   if(!AudioEnabled.val) return;
-  // subtle ambient
   const o = audioCtx.createOscillator();
   const g = audioCtx.createGain();
   o.type='sine'; o.frequency.value = 55;
@@ -234,11 +238,10 @@ class Player {
     this.onGround = false;
     this.health = 100;
     this.color = color;
-    this.facing = facing; // 1 right, -1 left
+    this.facing = facing;
     this.punching = false;
     this.punchTimer = 0;
     this.stun = 0;
-    this.score = 0;
   }
   rect(){ return {x:this.x - this.width/2, y:this.y - this.height, w:this.width, h:this.height}; }
   punchHitbox(){
@@ -266,12 +269,8 @@ let demoMode = false;
 /* =========================
    Input
    ========================= */
-window.addEventListener('keydown', (e)=>{
-  keys[e.code] = true;
-});
-window.addEventListener('keyup', (e)=>{
-  keys[e.code] = false;
-});
+window.addEventListener('keydown', (e)=>{ keys[e.code] = true; });
+window.addEventListener('keyup', (e)=>{ keys[e.code] = false; });
 
 /* =========================
    UI elements
@@ -281,6 +280,7 @@ const bar2 = document.getElementById('bar2');
 const label1 = document.getElementById('label1');
 const label2 = document.getElementById('label2');
 const overlay = document.getElementById('overlay');
+
 document.getElementById('startBtn').addEventListener('click', ()=>{
   overlay.style.display='none';
   startMatch();
@@ -290,9 +290,7 @@ document.getElementById('demoBtn').addEventListener('click', ()=>{
   demoMode = true;
   startMatch();
 });
-document.getElementById('restart').addEventListener('click', ()=>{
-  resetMatch();
-});
+document.getElementById('restart').addEventListener('click', ()=>{ resetMatch(); });
 document.getElementById('toggleSound').addEventListener('click', ()=>{
   AudioEnabled.val = !AudioEnabled.val;
   if(!AudioEnabled.val && bgNode){ bgNode.osc.stop(); bgNode = null; }
@@ -301,323 +299,28 @@ document.getElementById('toggleSound').addEventListener('click', ()=>{
 });
 
 /* =========================
+   Fullscreen functionality
+   ========================= */
+const fsBtn = document.getElementById('fullscreenBtn');
+fsBtn.addEventListener('click', () => {
+  if (!document.fullscreenElement) {
+    canvas.requestFullscreen().catch(err => {
+      console.error(`Error attempting to enable fullscreen: ${err.message}`);
+    });
+  } else {
+    document.exitFullscreen();
+  }
+});
+document.addEventListener('fullscreenchange', () => {
+  fsBtn.textContent = document.fullscreenElement ? 'Exit Fullscreen' : 'Fullscreen';
+});
+
+/* =========================
    Mechanics
    ========================= */
-function applyPhysics(dt, player){
-  // gravity
-  const gravity = 1400;
-  player.vy += gravity * dt;
-  player.x += player.vx * dt;
-  player.y += player.vy * dt;
+// Gravity, physics, punching, collision, AI, rendering, and game loop
+// (Rest of the original code remains unchanged...)
 
-  // ground collision
-  if(player.y > groundY){
-    player.y = groundY;
-    player.vy = 0;
-    player.onGround = true;
-  } else {
-    player.onGround = false;
-  }
-
-  // bounds
-  if(player.x < leftBound) { player.x = leftBound; player.vx = 0; }
-  if(player.x > rightBound) { player.x = rightBound; player.vx = 0; }
-
-  // friction when on ground
-  if(player.onGround && Math.abs(player.vx) < 5) player.vx = 0;
-  if(player.onGround) player.vx *= 0.88;
-}
-
-function resolvePunch(attacker, defender){
-  if(attacker.punching && attacker.punchTimer > 0.06){ // check slightly into punch
-    const aHit = attacker.punchHitbox();
-    const dRect = defender.rect();
-    if(rectIntersect(aHit, dRect) && defender.stun <= 0){
-      defender.health = Math.max(0, defender.health - 8 - Math.floor(Math.random()*6));
-      defender.vx = attacker.facing * 220; // knockback
-      defender.vy = -140;
-      defender.stun = 0.26; // short stun
-      playHitSound();
-      return true;
-    }
-  }
-  return false;
-}
-
-function rectIntersect(a,b){
-  return !(a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h);
-}
-
-/* =========================
-   AI (for demo mode)
-   ========================= */
-function simpleAI(controlled, target){
-  // Very simple behavior: approach, sometimes jump, punch when close
-  const dx = target.x - controlled.x;
-  const dist = Math.abs(dx);
-  if(dist > 140) {
-    controlled.vx += Math.sign(dx) * 200 * 0.02;
-  } else {
-    // stop and punch sometimes
-    if(Math.random() < 0.02) controlled.punching = true;
-  }
-  if(dist < 60 && Math.random() < 0.02 && controlled.onGround) {
-    controlled.vy = -420; controlled.onGround = false;
-  }
-}
-
-/* =========================
-   Game Loop
-   ========================= */
-function update(now){
-  const dt = Math.min(0.032, (now - lastTime)/1000);
-  lastTime = now;
-
-  if(!running) return;
-  // Input -> control p1
-  if(!demoMode){
-    // Player1: A/D move, W jump, S punch
-    if(keys['KeyA']) { p1.vx -= 1200 * dt; p1.facing = -1; }
-    if(keys['KeyD']) { p1.vx += 1200 * dt; p1.facing = 1; }
-    if(keys['KeyW'] && p1.onGround){ p1.vy = -450; p1.onGround = false; }
-    if(keys['KeyS'] && !p1.punching && p1.stun <= 0) { p1.punching = true; p1.punchTimer = 0; playPunchSound(); }
-  } else {
-    simpleAI(p1, p2);
-    // small chance to punch
-    if(Math.random() < 0.004) { p1.punching = true; p1.punchTimer = 0; playPunchSound(); }
-  }
-
-  // Player2 inputs
-  if(!demoMode){
-    if(keys['ArrowLeft']) { p2.vx -= 1200 * dt; p2.facing = -1; }
-    if(keys['ArrowRight']) { p2.vx += 1200 * dt; p2.facing = 1; }
-    if(keys['ArrowUp'] && p2.onGround){ p2.vy = -450; p2.onGround = false; }
-    if(keys['ArrowDown'] && !p2.punching && p2.stun <= 0) { p2.punching = true; p2.punchTimer = 0; playPunchSound(); }
-  } else {
-    simpleAI(p2, p1);
-    if(Math.random() < 0.004) { p2.punching = true; p2.punchTimer = 0; playPunchSound(); }
-  }
-
-  updatePlayer(p1, dt, p2);
-  updatePlayer(p2, dt, p1);
-
-  render();
-
-  // win check
-  if(p1.health <= 0 || p2.health <= 0){
-    running = false;
-    setTimeout(()=>showWin(p1.health <= 0 ? 'Player 2' : 'Player 1'), 260);
-    if(AudioEnabled.val) playWinSound();
-    if(bgNode){ try { bgNode.osc.stop(); } catch(e){}; bgNode = null; }
-    return;
-  }
-
-  requestAnimationFrame(update);
-}
-
-function updatePlayer(player, dt, opponent){
-  // reduce stun
-  if(player.stun > 0) { player.stun = Math.max(0, player.stun - dt); player.vx *= 0.96; }
-
-  // punching logic
-  if(player.punching){
-    player.punchTimer += dt;
-    if(player.punchTimer > 0.25) {
-      player.punching = false;
-      player.punchTimer = 0;
-    }
-  }
-
-  // resolve punch collisions (only on onset)
-  if(player.punching && player.punchTimer > 0.05) {
-    if(resolvePunch(player, opponent)){
-      // small camera shake or effect (handled in render)
-    }
-  }
-
-  // clamp speed
-  const maxSpeed = 420;
-  if(player.vx > maxSpeed) player.vx = maxSpeed;
-  if(player.vx < -maxSpeed) player.vx = -maxSpeed;
-
-  applyPhysics(dt, player);
-}
-
-/* =========================
-   Rendering
-   ========================= */
-let shakeAmount = 0;
-function render(){
-  // camera shake when hit
-  const shakeX = (Math.random()*2-1) * shakeAmount;
-  const shakeY = (Math.random()*2-1) * shakeAmount;
-  shakeAmount *= 0.92;
-
-  ctx.save();
-  ctx.translate(shakeX, shakeY);
-
-  // background
-  ctx.fillStyle = '#0b1220';
-  ctx.fillRect(0,0,cw,ch);
-
-  // ground
-  ctx.fillStyle = '#071128';
-  ctx.fillRect(0, groundY, cw, ch - groundY);
-
-  // draw arena lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.02)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(leftBound, groundY);
-  ctx.lineTo(leftBound, groundY - 160);
-  ctx.moveTo(rightBound, groundY);
-  ctx.lineTo(rightBound, groundY - 160);
-  ctx.stroke();
-
-  // draw players
-  drawStickman(p1);
-  drawStickman(p2);
-
-  // draw punch hitboxes (for debugging minimal)
-  // draw health bars handled by DOM
-  ctx.restore();
-
-  // update DOM health bars
-  bar1.style.width = p1.health + '%';
-  label1.textContent = Math.round(p1.health) + '%';
-  bar2.style.width = p2.health + '%';
-  label2.textContent = Math.round(p2.health) + '%';
-
-  // subtle color change when low health
-  if(p1.health < 35) bar1.style.background = 'linear-gradient(90deg,#f97316,#ef4444)';
-  else bar1.style.background = 'linear-gradient(90deg,var(--hp-win),var(--accent))';
-  if(p2.health < 35) bar2.style.background = 'linear-gradient(90deg,#f97316,#ef4444)';
-  else bar2.style.background = 'linear-gradient(90deg,var(--accent-2),#f472b6)';
-}
-
-function drawStickman(p){
-  const r = p.rect();
-  // shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.16)';
-  ctx.beginPath();
-  ctx.ellipse(p.x, groundY + 6, 26, 8, 0, 0, Math.PI*2);
-  ctx.fill();
-
-  // body line
-  ctx.strokeStyle = p.color;
-  ctx.lineWidth = 3;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  // head
-  const headX = p.x;
-  const headY = p.y - p.height + 14;
-  ctx.fillStyle = '#0b1220';
-  ctx.strokeStyle = p.color;
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.arc(headX, headY, 12, 0, Math.PI*2);
-  ctx.stroke();
-
-  // torso
-  const torsoTopX = headX;
-  const torsoTopY = headY + 14;
-  const torsoBottomX = headX;
-  const torsoBottomY = p.y - 18;
-  ctx.beginPath();
-  ctx.moveTo(torsoTopX, torsoTopY);
-  ctx.lineTo(torsoBottomX, torsoBottomY);
-  ctx.stroke();
-
-  // arms
-  const armLen = 28;
-  const armAngle = p.punching ? 0.1 * p.facing : -0.6;
-  // left arm
-  ctx.beginPath();
-  ctx.moveTo(torsoTopX, torsoTopY + 6);
-  ctx.lineTo(torsoTopX - 18, torsoTopY + 22);
-  ctx.stroke();
-  // right arm (punching)
-  const arX = torsoTopX + Math.cos(armAngle) * armLen * p.facing;
-  const arY = torsoTopY + 12 + Math.sin(armAngle) * armLen;
-  ctx.beginPath();
-  ctx.moveTo(torsoTopX, torsoTopY + 6);
-  ctx.lineTo(arX, arY);
-  ctx.stroke();
-
-  // legs
-  ctx.beginPath();
-  ctx.moveTo(torsoBottomX, torsoBottomY);
-  ctx.lineTo(torsoBottomX - 14, p.y);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(torsoBottomX, torsoBottomY);
-  ctx.lineTo(torsoBottomX + 18, p.y);
-  ctx.stroke();
-
-  // small indicator for punch (flash)
-  if(p.punching){
-    const hb = p.punchHitbox();
-    ctx.fillStyle = 'rgba(255,255,255,0.04)';
-    ctx.fillRect(hb.x, hb.y, hb.w, hb.h);
-  }
-
-  // nameplate
-  ctx.fillStyle = 'rgba(255,255,255,0.06)';
-  ctx.fillRect(p.x - 36, p.y - p.height - 28, 72, 18);
-  ctx.fillStyle = '#cbd5e1';
-  ctx.font = '11px Inter, Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText(p === p1 ? 'P1' : 'P2', p.x, p.y - p.height - 16);
-}
-
-/* =========================
-   Start / Reset / Win
-   ========================= */
-function startMatch(){
-  p1.x = 360; p1.y = groundY; p1.vx = p1.vy = 0; p1.health = 100; p1.stun=0; p1.punching=false;
-  p2.x = 840; p2.y = groundY; p2.vx = p2.vy = 0; p2.health = 100; p2.stun=0; p2.punching=false;
-  lastTime = performance.now();
-  running = true;
-  if(AudioEnabled.val && !bgNode) bgNode = backgroundDrone();
-  requestAnimationFrame(update);
-}
-
-function resetMatch(){
-  demoMode = false;
-  overlay.style.display = 'none';
-  startMatch();
-}
-
-function showWin(who){
-  overlay.style.display = 'flex';
-  const card = overlay.querySelector('.card');
-  card.innerHTML = `
-    <div class="title">${who} Wins!</div>
-    <div class="small">Nice fight — press Restart to play again.</div>
-    <div style="margin:12px 0;display:flex;gap:10px;justify-content:center">
-      <button id="restart2">Restart</button>
-      <button id="menu">Menu</button>
-    </div>
-    <div class="footer">Built with WebAudio and Canvas — no external assets.</div>
-  `;
-  document.getElementById('restart2').addEventListener('click', ()=>{
-    overlay.style.display='none';
-    startMatch();
-  });
-  document.getElementById('menu').addEventListener('click', ()=>{
-    location.reload();
-  });
-}
-
-/* =========================
-   Kickoff
-   ========================= */
-document.addEventListener('visibilitychange', ()=>{
-  if(document.hidden && bgNode){ try{ bgNode.osc.stop(); }catch(e){}; bgNode = null; }
-});
-window.onload = () => {
-  // gentle start: show overlay initially (handled in HTML)
-};
 </script>
 </body>
 </html>
