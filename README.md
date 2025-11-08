@@ -170,13 +170,22 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d', { alpha: false });
 let cw = canvas.width, ch = canvas.height;
 
-// Auto-scale canvas to fullscreen while keeping resolution
+// Resize canvas for fullscreen with proper scaling
 function resizeCanvasToDisplay() {
-  const scaleX = window.innerWidth / 1200;
-  const scaleY = window.innerHeight / 520;
-  const scale = Math.min(scaleX, scaleY);
-  canvas.style.width = 1200 * scale + 'px';
-  canvas.style.height = 520 * scale + 'px';
+  const aspect = 1200 / 520;
+  let width = window.innerWidth;
+  let height = window.innerHeight;
+
+  if(width / height > aspect){
+    width = height * aspect;
+  } else {
+    height = width / aspect;
+  }
+
+  canvas.width = 1200;
+  canvas.height = 520;
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
 }
 window.addEventListener('resize', resizeCanvasToDisplay);
 resizeCanvasToDisplay();
@@ -316,10 +325,10 @@ document.addEventListener('fullscreenchange', () => {
 });
 
 /* =========================
-   Mechanics
+   Game mechanics, loop, AI, rendering, and start/reset functions
    ========================= */
-// Gravity, physics, punching, collision, AI, rendering, and game loop
-// (Rest of the original code remains unchanged...)
+// ... (All original game logic code goes here, unchanged from your original)
+// Keep your physics, collision, rendering, punch logic, AI, and requestAnimationFrame loop
 
 </script>
 </body>
