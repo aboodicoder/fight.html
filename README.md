@@ -1,213 +1,623 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stickman Duel — Realistic</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Stickman Duel — 2 Player</title>
 <style>
-body{margin:0;overflow:hidden;background:#87ceeb;font-family:sans-serif;}
-canvas{display:block;}
-#ui{position:absolute;top:10px;width:100%;display:flex;justify-content:space-between;padding:0 20px;color:white;font-weight:bold;}
-.hp-bar{width:200px;height:20px;background:#444;border:2px solid #222;position:relative;}
-.hp-fill{height:100%;background:#0f0;width:100%;}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:20;}
-.card{background:#111;padding:20px;border-radius:14px;color:#fff;text-align:center;}
-button{margin:5px;padding:10px 16px;border:none;border-radius:10px;background:#333;color:#fff;cursor:pointer;}
-button:hover{background:#555;}
+  :root{
+    --bg:#0f1724;
+    --panel:#0b1220;
+    --accent:#7dd3fc;
+    --accent-2: #a78bfa;
+    --muted:#94a3b8;
+    --hp-bg:#243244;
+    --hp-lose:#ef4444;
+    --hp-win:#34d399;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#071028);color:#e6eef8;}
+  .wrap{
+    display:flex;
+    flex-direction:column;
+    min-height:100vh;
+    align-items:center;
+    justify-content:center;
+    gap:18px;
+    padding:24px;
+  }
+  .ui{
+    width:min(1000px,96vw);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:16px;
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border:1px solid rgba(255,255,255,0.03);
+    padding:12px;
+    border-radius:14px;
+    box-shadow: 0 6px 30px rgba(2,6,23,0.6);
+  }
+  .player-panel{
+    width:48%;
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .hp{
+    flex:1;
+    background:var(--hp-bg);
+    border-radius:10px;
+    height:14px;
+    overflow:hidden;
+    position:relative;
+  }
+  .hp .bar{
+    height:100%;
+    width:100%;
+    background:linear-gradient(90deg,var(--hp-win),var(--accent));
+    transform-origin:left;
+    transition:width .22s linear, background .22s linear;
+  }
+  .hp .label{
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    font-size:11px;color:var(--muted);
+    font-weight:600;
+    letter-spacing:0.5px;
+  }
+  .names{font-size:13px;color:var(--muted);font-weight:600;}
+  .center-controls{display:flex;flex-direction:column;align-items:center;gap:6px;}
+  button{
+    background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:10px;color:var(--muted);cursor:pointer;
+  }
+  button:hover{border-color:rgba(255,255,255,0.12);color:var(--accent);}
+  canvas{
+    display:block;
+    width:min(1000px,96vw);
+    height:420px;
+    border-radius:12px;
+    background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+    box-shadow: 0 20px 50px rgba(2,6,23,0.6);
+  }
+  .instructions{
+    max-width:1000px;
+    color:var(--muted);
+    font-size:13px;
+    text-align:center;
+    margin-top:2px;
+  }
+  .overlay{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(0deg, rgba(2,6,23,0.55), rgba(2,6,23,0.55));
+    z-index:20;
+  }
+  .card{
+    background:var(--panel);padding:20px;border-radius:14px;border:1px solid rgba(255,255,255,0.04);
+    text-align:center;max-width:560px;color:#dbeafe;
+  }
+  .title{font-size:20px;margin-bottom:8px;}
+  .small{font-size:13px;color:var(--muted);margin-bottom:12px;}
+  .footer{font-size:12px;color:var(--muted);margin-top:10px;}
+  @media (max-width:680px){
+    canvas{height:340px}
+    .ui{flex-direction:column;align-items:stretch}
+    .player-panel{width:100%}
+  }
 </style>
 </head>
 <body>
-<div id="ui">
-<div>Player1 <div class="hp-bar"><div class="hp-fill" id="p1hp"></div></div></div>
-<div>Player2 <div class="hp-bar"><div class="hp-fill" id="p2hp"></div></div></div>
-</div>
-<canvas id="c" width="1200" height="520"></canvas>
+<div class="wrap">
+  <div class="ui" role="region" aria-label="game UI">
+    <div class="player-panel">
+      <div class="names">Player 1 — WASD</div>
+      <div style="width:12px"></div>
+      <div class="hp" id="hp1" aria-hidden="false">
+        <div class="bar" id="bar1"></div>
+        <div class="label" id="label1">100%</div>
+      </div>
+    </div>
 
-<div id="overlay" class="overlay">
+    <div class="center-controls">
+      <div style="font-weight:700; color:var(--muted); letter-spacing:1px">Stickman Duel</div>
+      <div style="display:flex;gap:8px">
+        <button id="restart">Restart</button>
+        <button id="toggleSound">Toggle Sound</button>
+      </div>
+    </div>
+
+    <div class="player-panel" style="justify-content:flex-end;">
+      <div class="hp" id="hp2">
+        <div class="bar" id="bar2" style="background:linear-gradient(90deg,var(--accent-2),#f472b6)"></div>
+        <div class="label" id="label2">100%</div>
+      </div>
+      <div style="width:12px"></div>
+      <div class="names" style="text-align:right">Player 2 — Arrows</div>
+    </div>
+  </div>
+
+  <canvas id="game" width="1200" height="520"></canvas>
+
+  <div class="instructions">
+    Controls — Player 1: W A D (move/jump) + S (punch) · Player 2: ↑ ← → (move/jump) + ↓ (punch) · First to deplete opponent wins.
+  </div>
+</div>
+
+<!-- Overlay for start / win -->
+<div id="overlay" class="overlay" style="display:flex">
   <div class="card">
-    <h2>Choose Arena</h2>
-    <button id="arenaGrasslands">🌿 Grasslands</button>
-    <button id="arenaSahara">🏜️ Sahara</button>
-    <button id="arenaRainyForest">🌧️ Rainy Forest</button>
-    <button id="arenaDryland">🏞️ Dryland</button>
-    <div style="margin-top:10px;font-size:12px;">All by <strong>aboodicoder</strong></div>
+    <div class="title">Stickman Duel</div>
+    <div class="small">Two-player local — simple, modern, and responsive.</div>
+    <div style="margin-bottom:12px">
+      <strong>Player 1</strong> — WASD &middot; <strong>Player 2</strong> — Arrow keys
+    </div>
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button id="startBtn">Start Match</button>
+      <button id="demoBtn">Demo (AI vs AI)</button>
+    </div>
+    <div class="footer">Hit Restart to reset anytime. Sound is synth-based and safe for web (no external files).</div>
   </div>
 </div>
 
 <script>
-const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
-const cw=canvas.width,ch=canvas.height;
-const groundY=ch-80;
+/* =========================
+   Game constants & helpers
+   ========================= */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d', { alpha: false });
+let cw = canvas.width, ch = canvas.height;
 
-// --- Player Class ---
-class Player{
-  constructor(x,color,facing){
-    this.x=x;this.y=groundY;this.vx=0;this.vy=0;
-    this.width=36;this.height=70;
-    this.color=color;this.facing=facing;
-    this.onGround=true;this.health=100;
-    this.punch=false;this.punchTimer=0;
-    this.kick=false;this.kickTimer=0;
-    this.inPondTime=0;this.bubbles=[];
-  }
-  rect(){return {x:this.x-this.width/2,y:this.y-this.height,w:this.width,h:this.height};}
-  punchBox(){return {x:this.x+this.facing*30-15,y:this.y-45,w:30,h:20};}
-  kickBox(){return {x:this.x+this.facing*35-15,y:this.y-40,w:35,h:25};}
+function resizeCanvasToDisplay() {
+  // Keep internal resolution fixed for consistent gameplay, but scale drawing to CSS size
+  cw = canvas.width = 1200;
+  ch = canvas.height = 520;
 }
-const p1=new Player(360,'#0ff',1);
-const p2=new Player(840,'#f0f',-1);
+resizeCanvasToDisplay();
 
-// --- Input ---
-const keys={};
-window.addEventListener('keydown',e=>keys[e.code]=true);
-window.addEventListener('keyup',e=>keys[e.code]=false);
+/* =========================
+   Audio (WebAudio synth sounds)
+   ========================= */
+const AudioEnabled = { val: true };
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-// --- Arena Data ---
-let currentArena='grasslands';
-const pond={x:500,y:groundY-30,width:200,height:40};
-let trees=[],clouds=[],desertBalls=[],rainDrops=[];
-function setupArena(arena){
-  trees=[];clouds=[];desertBalls=[];rainDrops=[];
-  if(arena==='grasslands'){
-    for(let i=0;i<5;i++){trees.push({x:100+Math.random()*1000,y:groundY});}
-    for(let i=0;i<3;i++){clouds.push({x:50+Math.random()*1100,y:50+Math.random()*50});}
-  }
-  if(arena==='sahara'){for(let i=0;i<5;i++){desertBalls.push({x:Math.random()*1200,y:groundY-20});}}
-  if(arena==='rainyforest'){for(let i=0;i<100;i++){rainDrops.push({x:Math.random()*cw,y:Math.random()*ch,vy:200+Math.random()*100});}}
+function playTone(freq, type='sine', length=0.12, gain=0.12, decay=0.02){
+  if(!AudioEnabled.val) return;
+  const now = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, now);
+  g.gain.setValueAtTime(gain, now);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + length + decay);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(now); o.stop(now + length + decay);
 }
 
-// --- Sounds ---
-function playTone(freq,dur){try{const ac=new (window.AudioContext||window.webkitAudioContext)(); const osc=ac.createOscillator(); const gain=ac.createGain(); osc.connect(gain); gain.connect(ac.destination); osc.frequency.value=freq; osc.start(); osc.stop(ac.currentTime+dur);}catch(e){}}
-function punchSound(){playTone(600,0.08);}
-function kickSound(){playTone(480,0.08);}
-function hitSound(){playTone(180,0.1);}
-function winSound(){playTone(880,0.2);}
+function playPunchSound() {
+  playTone(600,'square',0.08,0.09,0.02);
+  setTimeout(()=>playTone(420,'sawtooth',0.12,0.06,0.03), 10);
+}
+function playHitSound() {
+  playTone(160,'sine',0.18,0.15,0.03);
+  setTimeout(()=>playTone(220,'triangle',0.1,0.08,0.02), 30);
+}
+function playWinSound() {
+  playTone(880,'sine',0.28,0.14,0.04);
+  setTimeout(()=>playTone(1100,'sine',0.22,0.12,0.03), 200);
+}
+function backgroundDrone(){
+  if(!AudioEnabled.val) return;
+  // subtle ambient
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type='sine'; o.frequency.value = 55;
+  g.gain.value = 0.02;
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start();
+  return {osc:o,gain:g};
+}
+let bgNode = null;
 
-// --- Physics ---
-function applyPhysics(p,dt){
-  const g=1400;
-  p.vy+=g*dt; p.x+=p.vx*dt; p.y+=p.vy*dt;
-  if(p.y>groundY){p.y=groundY;p.vy=0;p.onGround=true;}else p.onGround=false;
-  p.vx*=0.88;
+/* =========================
+   Player object
+   ========================= */
+class Player {
+  constructor(x, color, facing=1){
+    this.x = x;
+    this.y = 0;
+    this.vx = 0;
+    this.vy = 0;
+    this.width = 36;
+    this.height = 70;
+    this.onGround = false;
+    this.health = 100;
+    this.color = color;
+    this.facing = facing; // 1 right, -1 left
+    this.punching = false;
+    this.punchTimer = 0;
+    this.stun = 0;
+    this.score = 0;
+  }
+  rect(){ return {x:this.x - this.width/2, y:this.y - this.height, w:this.width, h:this.height}; }
+  punchHitbox(){
+    const range = 38;
+    const px = this.x + this.facing * (this.width/2 + range/2);
+    const py = this.y - this.height/2;
+    return {x: px - range/2, y: py - 16, w: range, h: 32};
+  }
+}
 
-  // Dryland hill
-  if(currentArena==='dryland'){let hillX=cw/2,hWidth=200,hHeight=50;
-    if(p.x>hillX-hWidth/2 && p.x<hillX+hWidth/2){
-      let hillTop=groundY-hHeight*Math.sin((p.x-(hillX-hWidth/2))/hWidth*Math.PI);
-      if(p.y>hillTop)p.y=hillTop;
+/* =========================
+   World & players
+   ========================= */
+const groundY = ch - 80;
+const leftBound = 80;
+const rightBound = cw - 80;
+const p1 = new Player(360, '#7dd3fc', 1);
+const p2 = new Player(840, '#f472b6', -1);
+
+let keys = {};
+let lastTime = performance.now();
+let running = false;
+let demoMode = false;
+
+/* =========================
+   Input
+   ========================= */
+window.addEventListener('keydown', (e)=>{
+  keys[e.code] = true;
+});
+window.addEventListener('keyup', (e)=>{
+  keys[e.code] = false;
+});
+
+/* =========================
+   UI elements
+   ========================= */
+const bar1 = document.getElementById('bar1');
+const bar2 = document.getElementById('bar2');
+const label1 = document.getElementById('label1');
+const label2 = document.getElementById('label2');
+const overlay = document.getElementById('overlay');
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  overlay.style.display='none';
+  startMatch();
+});
+document.getElementById('demoBtn').addEventListener('click', ()=>{
+  overlay.style.display='none';
+  demoMode = true;
+  startMatch();
+});
+document.getElementById('restart').addEventListener('click', ()=>{
+  resetMatch();
+});
+document.getElementById('toggleSound').addEventListener('click', ()=>{
+  AudioEnabled.val = !AudioEnabled.val;
+  if(!AudioEnabled.val && bgNode){ bgNode.osc.stop(); bgNode = null; }
+  if(AudioEnabled.val && running && !bgNode) bgNode = backgroundDrone();
+  document.getElementById('toggleSound').textContent = AudioEnabled.val ? 'Sound: On' : 'Sound: Off';
+});
+
+/* =========================
+   Mechanics
+   ========================= */
+function applyPhysics(dt, player){
+  // gravity
+  const gravity = 1400;
+  player.vy += gravity * dt;
+  player.x += player.vx * dt;
+  player.y += player.vy * dt;
+
+  // ground collision
+  if(player.y > groundY){
+    player.y = groundY;
+    player.vy = 0;
+    player.onGround = true;
+  } else {
+    player.onGround = false;
+  }
+
+  // bounds
+  if(player.x < leftBound) { player.x = leftBound; player.vx = 0; }
+  if(player.x > rightBound) { player.x = rightBound; player.vx = 0; }
+
+  // friction when on ground
+  if(player.onGround && Math.abs(player.vx) < 5) player.vx = 0;
+  if(player.onGround) player.vx *= 0.88;
+}
+
+function resolvePunch(attacker, defender){
+  if(attacker.punching && attacker.punchTimer > 0.06){ // check slightly into punch
+    const aHit = attacker.punchHitbox();
+    const dRect = defender.rect();
+    if(rectIntersect(aHit, dRect) && defender.stun <= 0){
+      defender.health = Math.max(0, defender.health - 8 - Math.floor(Math.random()*6));
+      defender.vx = attacker.facing * 220; // knockback
+      defender.vy = -140;
+      defender.stun = 0.26; // short stun
+      playHitSound();
+      return true;
+    }
+  }
+  return false;
+}
+
+function rectIntersect(a,b){
+  return !(a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h);
+}
+
+/* =========================
+   AI (for demo mode)
+   ========================= */
+function simpleAI(controlled, target){
+  // Very simple behavior: approach, sometimes jump, punch when close
+  const dx = target.x - controlled.x;
+  const dist = Math.abs(dx);
+  if(dist > 140) {
+    controlled.vx += Math.sign(dx) * 200 * 0.02;
+  } else {
+    // stop and punch sometimes
+    if(Math.random() < 0.02) controlled.punching = true;
+  }
+  if(dist < 60 && Math.random() < 0.02 && controlled.onGround) {
+    controlled.vy = -420; controlled.onGround = false;
+  }
+}
+
+/* =========================
+   Game Loop
+   ========================= */
+function update(now){
+  const dt = Math.min(0.032, (now - lastTime)/1000);
+  lastTime = now;
+
+  if(!running) return;
+  // Input -> control p1
+  if(!demoMode){
+    // Player1: A/D move, W jump, S punch
+    if(keys['KeyA']) { p1.vx -= 1200 * dt; p1.facing = -1; }
+    if(keys['KeyD']) { p1.vx += 1200 * dt; p1.facing = 1; }
+    if(keys['KeyW'] && p1.onGround){ p1.vy = -450; p1.onGround = false; }
+    if(keys['KeyS'] && !p1.punching && p1.stun <= 0) { p1.punching = true; p1.punchTimer = 0; playPunchSound(); }
+  } else {
+    simpleAI(p1, p2);
+    // small chance to punch
+    if(Math.random() < 0.004) { p1.punching = true; p1.punchTimer = 0; playPunchSound(); }
+  }
+
+  // Player2 inputs
+  if(!demoMode){
+    if(keys['ArrowLeft']) { p2.vx -= 1200 * dt; p2.facing = -1; }
+    if(keys['ArrowRight']) { p2.vx += 1200 * dt; p2.facing = 1; }
+    if(keys['ArrowUp'] && p2.onGround){ p2.vy = -450; p2.onGround = false; }
+    if(keys['ArrowDown'] && !p2.punching && p2.stun <= 0) { p2.punching = true; p2.punchTimer = 0; playPunchSound(); }
+  } else {
+    simpleAI(p2, p1);
+    if(Math.random() < 0.004) { p2.punching = true; p2.punchTimer = 0; playPunchSound(); }
+  }
+
+  updatePlayer(p1, dt, p2);
+  updatePlayer(p2, dt, p1);
+
+  render();
+
+  // win check
+  if(p1.health <= 0 || p2.health <= 0){
+    running = false;
+    setTimeout(()=>showWin(p1.health <= 0 ? 'Player 2' : 'Player 1'), 260);
+    if(AudioEnabled.val) playWinSound();
+    if(bgNode){ try { bgNode.osc.stop(); } catch(e){}; bgNode = null; }
+    return;
+  }
+
+  requestAnimationFrame(update);
+}
+
+function updatePlayer(player, dt, opponent){
+  // reduce stun
+  if(player.stun > 0) { player.stun = Math.max(0, player.stun - dt); player.vx *= 0.96; }
+
+  // punching logic
+  if(player.punching){
+    player.punchTimer += dt;
+    if(player.punchTimer > 0.25) {
+      player.punching = false;
+      player.punchTimer = 0;
     }
   }
 
-  // Grasslands pond sinking
-  if(currentArena==='grasslands'){
-    let px=p.x, py=p.y, pondTop=groundY-pond.height;
-    if(px>pond.x && px<pond.x+pond.width && py>pondTop){
-      let depth=Math.min(pond.height, py-pondTop);
-      p.y=groundY-depth;
+  // resolve punch collisions (only on onset)
+  if(player.punching && player.punchTimer > 0.05) {
+    if(resolvePunch(player, opponent)){
+      // small camera shake or effect (handled in render)
     }
   }
+
+  // clamp speed
+  const maxSpeed = 420;
+  if(player.vx > maxSpeed) player.vx = maxSpeed;
+  if(player.vx < -maxSpeed) player.vx = -maxSpeed;
+
+  applyPhysics(dt, player);
 }
 
-// --- Combat ---
-function rectOverlap(a,b){return !(a.x+a.w<b.x || a.x>b.x+b.w || a.y+a.h<b.y || a.y>b.y+b.h);}
-function doPunch(a,b){if(a.punch && a.punchTimer>0.05){if(rectOverlap(a.punchBox(),b.rect())){b.health=Math.max(0,b.health-10);b.vx=a.facing*200;b.vy=-140;hitSound();}}}
-function doKick(a,b){if(a.kick && a.kickTimer>0.05){if(rectOverlap(a.kickBox(),b.rect())){b.health=Math.max(0,b.health-10);b.vx=a.facing*200;b.vy=-140;hitSound();}}}
+/* =========================
+   Rendering
+   ========================= */
+let shakeAmount = 0;
+function render(){
+  // camera shake when hit
+  const shakeX = (Math.random()*2-1) * shakeAmount;
+  const shakeY = (Math.random()*2-1) * shakeAmount;
+  shakeAmount *= 0.92;
 
-// --- Update ---
-function update(dt){
-  // Player input
-  if(keys['KeyA']){p1.vx=-200;p1.facing=-1;}
-  if(keys['KeyD']){p1.vx=200;p1.facing=1;}
-  if(keys['KeyW'] && p1.onGround){p1.vy=-450;p1.onGround=false;}
-  if(keys['KeyS'] && !p1.punch){p1.punch=true;p1.punchTimer=0;punchSound();}
-  if(keys['ShiftLeft'] && !p1.kick){p1.kick=true;p1.kickTimer=0;kickSound();}
+  ctx.save();
+  ctx.translate(shakeX, shakeY);
 
-  if(keys['ArrowLeft']){p2.vx=-200;p2.facing=-1;}
-  if(keys['ArrowRight']){p2.vx=200;p2.facing=1;}
-  if(keys['ArrowUp'] && p2.onGround){p2.vy=-450;p2.onGround=false;}
-  if(keys['ArrowDown'] && !p2.punch){p2.punch=true;p2.punchTimer=0;punchSound();}
-  if(keys['ShiftRight'] && !p2.kick){p2.kick=true;p2.kickTimer=0;kickSound();}
+  // background
+  ctx.fillStyle = '#0b1220';
+  ctx.fillRect(0,0,cw,ch);
 
-  applyPhysics(p1,dt); applyPhysics(p2,dt);
+  // ground
+  ctx.fillStyle = '#071128';
+  ctx.fillRect(0, groundY, cw, ch - groundY);
 
-  // Pond bubbles & drowning
-  [p1,p2].forEach(p=>{
-    if(currentArena==='grasslands' && p.x>pond.x && p.x<pond.x+pond.width && p.y>groundY-pond.height){
-      p.inPondTime+=dt;
-      if(p.bubbles.length<3 && Math.floor(p.inPondTime)>p.bubbles.length)p.bubbles.push({});
-      if(p.inPondTime>3)p.health=Math.max(0,p.health-10*dt);
-    } else {p.inPondTime=0;p.bubbles=[];}
-  });
+  // draw arena lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.02)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(leftBound, groundY);
+  ctx.lineTo(leftBound, groundY - 160);
+  ctx.moveTo(rightBound, groundY);
+  ctx.lineTo(rightBound, groundY - 160);
+  ctx.stroke();
 
-  doPunch(p1,p2); doPunch(p2,p1); doKick(p1,p2); doKick(p2,p1);
+  // draw players
+  drawStickman(p1);
+  drawStickman(p2);
 
-  if(p1.punch){p1.punchTimer+=dt;if(p1.punchTimer>0.25)p1.punch=false;}
-  if(p1.kick){p1.kickTimer+=dt;if(p1.kickTimer>0.25)p1.kick=false;}
-  if(p2.punch){p2.punchTimer+=dt;if(p2.punchTimer>0.25)p2.punch=false;}
-  if(p2.kick){p2.kickTimer+=dt;if(p2.kickTimer>0.25)p2.kick=false;}
+  // draw punch hitboxes (for debugging minimal)
+  // draw health bars handled by DOM
+  ctx.restore();
 
-  document.getElementById('p1hp').style.width=p1.health+'%';
-  document.getElementById('p2hp').style.width=p2.health+'%';
+  // update DOM health bars
+  bar1.style.width = p1.health + '%';
+  label1.textContent = Math.round(p1.health) + '%';
+  bar2.style.width = p2.health + '%';
+  label2.textContent = Math.round(p2.health) + '%';
 
-  if(p1.health<=0 || p2.health<=0){winSound();running=false;}
+  // subtle color change when low health
+  if(p1.health < 35) bar1.style.background = 'linear-gradient(90deg,#f97316,#ef4444)';
+  else bar1.style.background = 'linear-gradient(90deg,var(--hp-win),var(--accent))';
+  if(p2.health < 35) bar2.style.background = 'linear-gradient(90deg,#f97316,#ef4444)';
+  else bar2.style.background = 'linear-gradient(90deg,var(--accent-2),#f472b6)';
 }
 
-// --- Draw ---
-function draw(){
-  ctx.clearRect(0,0,cw,ch);
+function drawStickman(p){
+  const r = p.rect();
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.16)';
+  ctx.beginPath();
+  ctx.ellipse(p.x, groundY + 6, 26, 8, 0, 0, Math.PI*2);
+  ctx.fill();
 
-  // Background
-  if(currentArena==='grasslands'){ctx.fillStyle="#87ceeb";ctx.fillRect(0,0,cw,ch);}
-  if(currentArena==='sahara'){ctx.fillStyle="#f9e79f";ctx.fillRect(0,0,cw,ch);}
-  if(currentArena==='rainyforest'){ctx.fillStyle="#145a32";ctx.fillRect(0,0,cw,ch);}
-  if(currentArena==='dryland'){ctx.fillStyle="#d8c19f";ctx.fillRect(0,0,cw,ch);}
+  // body line
+  ctx.strokeStyle = p.color;
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  // head
+  const headX = p.x;
+  const headY = p.y - p.height + 14;
+  ctx.fillStyle = '#0b1220';
+  ctx.strokeStyle = p.color;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(headX, headY, 12, 0, Math.PI*2);
+  ctx.stroke();
 
-  // Clouds
-  if(currentArena==='grasslands'){clouds.forEach(c=>{ctx.fillStyle="white";ctx.beginPath();ctx.arc(c.x,c.y,20,0,Math.PI*2);ctx.fill();c.x+=10/60;if(c.x>cw)c.x=-50;});}
+  // torso
+  const torsoTopX = headX;
+  const torsoTopY = headY + 14;
+  const torsoBottomX = headX;
+  const torsoBottomY = p.y - 18;
+  ctx.beginPath();
+  ctx.moveTo(torsoTopX, torsoTopY);
+  ctx.lineTo(torsoBottomX, torsoBottomY);
+  ctx.stroke();
 
-  // Ground
-  ctx.fillStyle=currentArena==='sahara'?'#f1c40f':currentArena==='rainyforest'?'#145a32':'#6aa84f';
-  ctx.fillRect(0,groundY,cw,ch-groundY);
+  // arms
+  const armLen = 28;
+  const armAngle = p.punching ? 0.1 * p.facing : -0.6;
+  // left arm
+  ctx.beginPath();
+  ctx.moveTo(torsoTopX, torsoTopY + 6);
+  ctx.lineTo(torsoTopX - 18, torsoTopY + 22);
+  ctx.stroke();
+  // right arm (punching)
+  const arX = torsoTopX + Math.cos(armAngle) * armLen * p.facing;
+  const arY = torsoTopY + 12 + Math.sin(armAngle) * armLen;
+  ctx.beginPath();
+  ctx.moveTo(torsoTopX, torsoTopY + 6);
+  ctx.lineTo(arX, arY);
+  ctx.stroke();
 
-  // Pond
-  if(currentArena==='grasslands'){
-    ctx.fillStyle="#1e90ff";
-    ctx.fillRect(pond.x,groundY-pond.height,pond.width,pond.height);
+  // legs
+  ctx.beginPath();
+  ctx.moveTo(torsoBottomX, torsoBottomY);
+  ctx.lineTo(torsoBottomX - 14, p.y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(torsoBottomX, torsoBottomY);
+  ctx.lineTo(torsoBottomX + 18, p.y);
+  ctx.stroke();
+
+  // small indicator for punch (flash)
+  if(p.punching){
+    const hb = p.punchHitbox();
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fillRect(hb.x, hb.y, hb.w, hb.h);
   }
 
-  // Trees
-  if(currentArena==='grasslands'){trees.forEach(t=>{
-    ctx.fillStyle="#8b4513";ctx.fillRect(t.x,groundY-50,10,50);
-    ctx.fillStyle="#228b22";ctx.beginPath();ctx.moveTo(t.x-15,groundY-50);ctx.lineTo(t.x+25,groundY-50);ctx.lineTo(t.x+5,groundY-90);ctx.closePath();ctx.fill();
-  });}
+  // nameplate
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.fillRect(p.x - 36, p.y - p.height - 28, 72, 18);
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '11px Inter, Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(p === p1 ? 'P1' : 'P2', p.x, p.y - p.height - 16);
+}
 
-  // Players
-  [p1,p2].forEach(p=>{
-    ctx.strokeStyle=p.color;ctx.lineWidth=3;
-    let headY=p.y-p.height+14;
-    ctx.beginPath();ctx.arc(p.x,headY,12,0,2*Math.PI);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(p.x,headY+14);ctx.lineTo(p.x,p.y-18);ctx.stroke();
-    let legSwing=Math.sin(Date.now()/200)*5;
-    ctx.beginPath();ctx.moveTo(p.x,p.y-18);ctx.lineTo(p.x-14,p.y+legSwing);ctx.moveTo(p.x,p.y-18);ctx.lineTo(p.x+18,p.y-legSwing);ctx.stroke();
-    let armSwing=Math.sin(Date.now()/200)*10;
-    ctx.beginPath();ctx.moveTo(p.x,headY+16);ctx.lineTo(p.x+p.facing*28,headY+28+armSwing);ctx.stroke();
-    if(p.punch){ctx.beginPath();ctx.moveTo(p.x,headY+16);ctx.lineTo(p.x+p.facing*40,headY+28);ctx.stroke();}
-    if(p.kick){ctx.beginPath();ctx.moveTo(p.x,p.y-18);ctx.lineTo(p.x+p.facing*35,p.y-10);ctx.stroke();}
-    p.bubbles.forEach((b,i)=>{ctx.fillStyle='rgba(173,216,230,0.8)';ctx.beginPath();ctx.arc(p.x,p.y-p.height-10-i*12,6,0,2*Math.PI);ctx.fill();});
+/* =========================
+   Start / Reset / Win
+   ========================= */
+function startMatch(){
+  p1.x = 360; p1.y = groundY; p1.vx = p1.vy = 0; p1.health = 100; p1.stun=0; p1.punching=false;
+  p2.x = 840; p2.y = groundY; p2.vx = p2.vy = 0; p2.health = 100; p2.stun=0; p2.punching=false;
+  lastTime = performance.now();
+  running = true;
+  if(AudioEnabled.val && !bgNode) bgNode = backgroundDrone();
+  requestAnimationFrame(update);
+}
+
+function resetMatch(){
+  demoMode = false;
+  overlay.style.display = 'none';
+  startMatch();
+}
+
+function showWin(who){
+  overlay.style.display = 'flex';
+  const card = overlay.querySelector('.card');
+  card.innerHTML = `
+    <div class="title">${who} Wins!</div>
+    <div class="small">Nice fight — press Restart to play again.</div>
+    <div style="margin:12px 0;display:flex;gap:10px;justify-content:center">
+      <button id="restart2">Restart</button>
+      <button id="menu">Menu</button>
+    </div>
+    <div class="footer">Built with WebAudio and Canvas — no external assets.</div>
+  `;
+  document.getElementById('restart2').addEventListener('click', ()=>{
+    overlay.style.display='none';
+    startMatch();
+  });
+  document.getElementById('menu').addEventListener('click', ()=>{
+    location.reload();
   });
 }
 
-// --- Loop ---
-let running=true,last=0;
-function loop(ts){const dt=(ts-last)/1000; last=ts; if(running){update(dt);draw();requestAnimationFrame(loop);}}
-requestAnimationFrame(loop);
-
-// --- Arena Buttons ---
-document.getElementById('arenaGrasslands').onclick=()=>{currentArena='grasslands';setupArena('grasslands');document.getElementById('overlay').style.display='none';};
-document.getElementById('arenaSahara').onclick=()=>{currentArena='sahara';setupArena('sahara');document.getElementById('overlay').style.display='none';};
-document.getElementById('arenaRainyForest').onclick=()=>{currentArena='rainyforest';setupArena('rainyforest');document.getElementById('overlay').style.display='none';};
-document.getElementById('arenaDryland').onclick=()=>{currentArena='dryland';setupArena('dryland');document.getElementById('overlay').style.display='none';};
-setupArena('grasslands');
+/* =========================
+   Kickoff
+   ========================= */
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden && bgNode){ try{ bgNode.osc.stop(); }catch(e){}; bgNode = null; }
+});
+window.onload = () => {
+  // gentle start: show overlay initially (handled in HTML)
+};
 </script>
 </body>
 </html>
