@@ -134,46 +134,53 @@
         <div class="label" id="label2">100%</div>
       </div>
       <div style="width:12px"></div>
-      <div class="names" style="text-align:right">Player 2 — Arrows / Bot</div>
+      <div class="names" style="text-align:right">Player 2 — Arrows</div>
     </div>
   </div>
 
   <canvas id="game" width="1200" height="520"></canvas>
 
   <div class="instructions">
-    Controls — Player 1: W A D (move/jump) + S (punch) · Player 2: ↑ ← → (move/jump) + ↓ (punch) or Bot · First to deplete opponent wins.
+    Controls — Player 1: W A D (move/jump) + S (punch) · Player 2: ↑ ← → (move/jump) + ↓ (punch) · First to deplete opponent wins.
   </div>
 </div>
 
+<!-- Overlay for start / win -->
 <div id="overlay" class="overlay" style="display:flex">
   <div class="card">
     <div class="title">Stickman Duel</div>
-    <div class="small">Two-player local or vs Bot — simple, modern, and responsive.</div>
+    <div class="small">Two-player local or Bot — simple, modern, and responsive.</div>
     <div style="margin-bottom:12px">
-      <strong>Player 1</strong> — WASD &middot; <strong>Player 2</strong> — Arrow keys / Bot
+      <strong>Player 1</strong> — WASD &middot; <strong>Player 2</strong> — Arrow keys
     </div>
     <div style="display:flex;gap:8px;justify-content:center">
-      <button id="startBtn">Start 2-Player Match</button>
-      <button id="demoBtn">Play vs Bot</button>
+      <button id="startBtn">Start 2-Player</button>
+      <button id="easyBotBtn">Easy Bot</button>
+      <button id="hardBotBtn">Hard Bot</button>
     </div>
-    <div class="footer">Hit Restart to reset anytime. Sound is synth-based and safe for web (no external files).</div>
+    <div class="footer">Hit Restart to reset anytime. Sound is synth-based and safe for web.</div>
   </div>
 </div>
 
 <script>
-// Canvas setup
+/* =========================
+   Canvas setup
+========================= */
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d', { alpha: false });
 let cw = canvas.width, ch = canvas.height;
+const groundY = ch - 80, leftBound=80, rightBound=cw-80;
+function resizeCanvasToDisplay(){ cw=canvas.width=1200; ch=canvas.height=520; }
+resizeCanvasToDisplay();
 
-// Audio setup
-const AudioEnabled = { val: true };
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+/* =========================
+   Audio
+========================= */
+const AudioEnabled={val:true};
+const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
 function playTone(freq,type='sine',length=0.12,gain=0.12,decay=0.02){
   if(!AudioEnabled.val) return;
-  const now = audioCtx.currentTime;
-  const o = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
+  const now=audioCtx.currentTime, o=audioCtx.createOscillator(), g=audioCtx.createGain();
   o.type=type; o.frequency.setValueAtTime(freq,now);
   g.gain.setValueAtTime(gain,now);
   g.gain.exponentialRampToValueAtTime(0.0001,now+length+decay);
@@ -182,114 +189,189 @@ function playTone(freq,type='sine',length=0.12,gain=0.12,decay=0.02){
 function playPunchSound(){ playTone(600,'square',0.08,0.09,0.02); setTimeout(()=>playTone(420,'sawtooth',0.12,0.06,0.03),10);}
 function playHitSound(){ playTone(160,'sine',0.18,0.15,0.03); setTimeout(()=>playTone(220,'triangle',0.1,0.08,0.02),30);}
 function playWinSound(){ playTone(880,'sine',0.28,0.14,0.04); setTimeout(()=>playTone(1100,'sine',0.22,0.12,0.03),200);}
-function backgroundDrone(){ if(!AudioEnabled.val) return; const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='sine'; o.frequency.value=55; g.gain.value=0.02; o.connect(g); g.connect(audioCtx.destination); o.start(); return {osc:o,gain:g}; }
+function backgroundDrone(){ if(!AudioEnabled.val) return; const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='sine'; o.frequency.value=55; g.gain.value=0.02; o.connect(g); g.connect(audioCtx.destination); o.start(); return {osc:o,gain:g}; }
 let bgNode=null;
 
-// Player class
+/* =========================
+   Player class
+========================= */
 class Player{
   constructor(x,color,facing=1){
-    this.x=x; this.y=0; this.vx=0; this.vy=0;
-    this.width=36; this.height=70; this.onGround=false;
-    this.health=100; this.color=color; this.facing=facing;
-    this.punching=false; this.punchTimer=0; this.stun=0; this.score=0;
-    this.combo=0; this.comboTimer=0;
+    this.x=x; this.y=0; this.vx=0; this.vy=0; this.width=36; this.height=70;
+    this.onGround=false; this.health=100; this.color=color; this.facing=facing;
+    this.punching=false; this.punchTimer=0; this.stun=0; this.combo=0; this.comboTimer=0;
   }
   rect(){ return {x:this.x-this.width/2, y:this.y-this.height, w:this.width, h:this.height}; }
-  punchHitbox(){ const range=38; const px=this.x+this.facing*(this.width/2+range/2); const py=this.y-this.height/2; return {x:px-range/2, y:py-16, w:range, h:32}; }
+  punchHitbox(){
+    const range=38, px=this.x+this.facing*(this.width/2+range/2), py=this.y-this.height/2;
+    return {x:px-range/2, y:py-16, w:range, h:32};
+  }
 }
 
-// World
-const groundY = ch-80, leftBound=80, rightBound=cw-80;
+/* =========================
+   World & players
+========================= */
 const p1=new Player(360,'#7dd3fc',1);
 const p2=new Player(840,'#f472b6',-1);
+let keys={}, lastTime=performance.now(), running=false, demoMode=false, botMode=false, botDifficulty='easy';
 
-let keys={}, lastTime=performance.now(), running=false, demoMode=false, botMode=false;
+/* =========================
+   Input
+========================= */
+window.addEventListener('keydown',e=>keys[e.code]=true);
+window.addEventListener('keyup',e=>keys[e.code]=false);
 
-// Input
-window.addEventListener('keydown', e=>{ keys[e.code]=true; });
-window.addEventListener('keyup', e=>{ keys[e.code]=false; });
+/* =========================
+   UI
+========================= */
+const bar1=document.getElementById('bar1'), bar2=document.getElementById('bar2'), label1=document.getElementById('label1'), label2=document.getElementById('label2'), overlay=document.getElementById('overlay');
 
-// UI
-const bar1=document.getElementById('bar1');
-const bar2=document.getElementById('bar2');
-const label1=document.getElementById('label1');
-const label2=document.getElementById('label2');
-const overlay=document.getElementById('overlay');
 document.getElementById('startBtn').addEventListener('click',()=>{ overlay.style.display='none'; botMode=false; startMatch(); });
-document.getElementById('demoBtn').addEventListener('click',()=>{ overlay.style.display='none'; botMode=true; startMatch(); });
+document.getElementById('easyBotBtn').addEventListener('click',()=>{ overlay.style.display='none'; botMode=true; botDifficulty='easy'; startMatch(); });
+document.getElementById('hardBotBtn').addEventListener('click',()=>{ overlay.style.display='none'; botMode=true; botDifficulty='hard'; startMatch(); });
 document.getElementById('restart').addEventListener('click',()=>{ resetMatch(); });
-document.getElementById('toggleSound').addEventListener('click',()=>{ AudioEnabled.val=!AudioEnabled.val; if(!AudioEnabled.val&&bgNode){bgNode.osc.stop();bgNode=null;} if(AudioEnabled.val&&running&&!bgNode) bgNode=backgroundDrone(); document.getElementById('toggleSound').textContent=AudioEnabled.val?'Sound: On':'Sound: Off'; });
+document.getElementById('toggleSound').addEventListener('click',()=>{
+  AudioEnabled.val=!AudioEnabled.val;
+  if(!AudioEnabled.val && bgNode){ bgNode.osc.stop(); bgNode=null; }
+  if(AudioEnabled.val && running && !bgNode) bgNode=backgroundDrone();
+  document.getElementById('toggleSound').textContent=AudioEnabled.val?'Sound: On':'Sound: Off';
+});
 
-// Physics
-function applyPhysics(dt,player){ const g=1400; player.vy+=g*dt; player.x+=player.vx*dt; player.y+=player.vy*dt; if(player.y>groundY){player.y=groundY;player.vy=0;player.onGround=true;}else player.onGround=false; if(player.x<leftBound){player.x=leftBound;player.vx=0;} if(player.x>rightBound){player.x=rightBound;player.vx=0;} if(player.onGround&&Math.abs(player.vx)<5)player.vx=0; if(player.onGround)player.vx*=0.88; }
-function rectIntersect(a,b){ return !(a.x+a.w<b.x||a.x>b.x+b.w||a.y+a.h<b.y||a.y>b.y+b.h); }
-function resolvePunch(attacker,defender){ if(attacker.punching&&attacker.punchTimer>0.06){ const aHit=attacker.punchHitbox(); const dRect=defender.rect(); if(rectIntersect(aHit,dRect)&&defender.stun<=0){ defender.health=Math.max(0,defender.health-8-Math.floor(Math.random()*6)); defender.vx=attacker.facing*220; defender.vy=-140; defender.stun=0.26; playHitSound(); attacker.combo+=1; attacker.comboTimer=0; defender.combo=0; shakeAmount=4; return true; } } return false; }
+/* =========================
+   Mechanics
+========================= */
+function applyPhysics(dt,player){
+  const gravity=1400;
+  player.vy+=gravity*dt;
+  player.x+=player.vx*dt;
+  player.y+=player.vy*dt;
+  if(player.y>groundY){ player.y=groundY; player.vy=0; player.onGround=true; } else { player.onGround=false; }
+  if(player.x<leftBound){ player.x=leftBound; player.vx=0; }
+  if(player.x>rightBound){ player.x=rightBound; player.vx=0; }
+  if(player.onGround && Math.abs(player.vx)<5) player.vx=0;
+  if(player.onGround) player.vx*=0.88;
+}
+function rectIntersect(a,b){ return !(a.x+a.w<b.x || a.x>b.x+b.w || a.y+a.h<b.y || a.y>b.y+b.h); }
+function resolvePunch(attacker,defender){
+  if(attacker.punching && attacker.punchTimer>0.06){
+    const aHit=attacker.punchHitbox(), dRect=defender.rect();
+    if(rectIntersect(aHit,dRect) && defender.stun<=0){
+      defender.health=Math.max(0,defender.health-8-Math.floor(Math.random()*6));
+      defender.vx=attacker.facing*220; defender.vy=-140; defender.stun=0.26;
+      // combo handling
+      attacker.combo++;
+      attacker.comboTimer=1.0;
+      defender.combo=0; defender.comboTimer=0;
+      playHitSound();
+      return true;
+    }
+  }
+  return false;
+}
 
-// Simple AI
-function simpleAI(controlled,target){ const dx=target.x-controlled.x; const dist=Math.abs(dx); if(dist>140) controlled.vx+=Math.sign(dx)*200*0.02; else if(Math.random()<0.02) controlled.punching=true; if(dist<60&&Math.random()<0.02&&controlled.onGround){ controlled.vy=-420; controlled.onGround=false;} }
+/* =========================
+   Bot AI
+========================= */
+function botAI(controlled,target){
+  const dx=target.x-controlled.x, dist=Math.abs(dx);
+  if(botDifficulty==='easy'){
+    controlled.vx+=Math.sign(dx)*200*0.016;
+    if(dist<80 && Math.random()<0.01 && !controlled.punching && controlled.stun<=0){
+      controlled.punching=true; controlled.punchTimer=0; playPunchSound();
+    }
+    if(dist<60 && Math.random()<0.01 && controlled.onGround){ controlled.vy=-350; controlled.onGround=false; }
+  } else {
+    if(dist>100){ controlled.vx+=Math.sign(dx)*350*0.016; } else { controlled.vx*=0.8; }
+    if(dist<90 && Math.random()<0.03 && !controlled.punching && controlled.stun<=0){
+      controlled.punching=true; controlled.punchTimer=0; playPunchSound();
+    }
+    if(target.punching && Math.abs(target.x-controlled.x)<60 && controlled.onGround){ controlled.vy=-400; controlled.onGround=false; }
+    if(Math.random()<0.005 && controlled.onGround){ controlled.vy=-420; controlled.onGround=false; }
+  }
+}
 
-let shakeAmount=0;
-
-// Game loop
+/* =========================
+   Update Loop
+========================= */
 function update(now){
-  const dt=Math.min(0.032,(now-lastTime)/1000); lastTime=now;
+  const dt=Math.min(0.032,(now-lastTime)/1000);
+  lastTime=now;
   if(!running) return;
 
-  // Player 1 input
-  if(keys['KeyA']) p1.vx-=1200*dt,p1.facing=-1;
-  if(keys['KeyD']) p1.vx+=1200*dt,p1.facing=1;
-  if(keys['KeyW']&&p1.onGround){ p1.vy=-450; p1.onGround=false;}
-  if(keys['KeyS']&&!p1.punching&&p1.stun<=0){ p1.punching=true; p1.punchTimer=0; playPunchSound();}
+  // Player1 input
+  if(!botMode || demoMode){
+    if(keys['KeyA']) { p1.vx-=1200*dt; p1.facing=-1; }
+    if(keys['KeyD']) { p1.vx+=1200*dt; p1.facing=1; }
+    if(keys['KeyW'] && p1.onGround){ p1.vy=-450; p1.onGround=false; }
+    if(keys['KeyS'] && !p1.punching && p1.stun<=0){ p1.punching=true; p1.punchTimer=0; playPunchSound(); }
+  }
 
-  // Player 2 input or AI
-  if(botMode){ simpleAI(p2,p1); if(Math.random()<0.004){p2.punching=true; p2.punchTimer=0; playPunchSound();} }
-  else{ if(keys['ArrowLeft']) p2.vx-=1200*dt,p2.facing=-1; if(keys['ArrowRight']) p2.vx+=1200*dt,p2.facing=1; if(keys['ArrowUp']&&p2.onGround){p2.vy=-450;p2.onGround=false;} if(keys['ArrowDown']&&!p2.punching&&p2.stun<=0){p2.punching=true;p2.punchTimer=0;playPunchSound();} }
+  // Player2 input or bot
+  if(botMode){ botAI(p2,p1); }
+  else {
+    if(keys['ArrowLeft']){ p2.vx-=1200*dt; p2.facing=-1; }
+    if(keys['ArrowRight']){ p2.vx+=1200*dt; p2.facing=1; }
+    if(keys['ArrowUp'] && p2.onGround){ p2.vy=-450; p2.onGround=false; }
+    if(keys['ArrowDown'] && !p2.punching && p2.stun<=0){ p2.punching=true; p2.punchTimer=0; playPunchSound(); }
+  }
 
   updatePlayer(p1,dt,p2);
   updatePlayer(p2,dt,p1);
   render();
 
-  if(p1.health<=0||p2.health<=0){ running=false; setTimeout(()=>showWin(p1.health<=0?'Player 2':'Player 1'),260); if(AudioEnabled.val) playWinSound(); if(bgNode){try{bgNode.osc.stop();}catch(e){} bgNode=null;} return; }
+  if(p1.health<=0 || p2.health<=0){
+    running=false;
+    setTimeout(()=>showWin(p1.health<=0?'Player 2':'Player 1'),260);
+    if(AudioEnabled.val) playWinSound();
+    if(bgNode){ try{ bgNode.osc.stop(); }catch(e){}; bgNode=null; }
+    return;
+  }
 
   requestAnimationFrame(update);
 }
 
 function updatePlayer(player,dt,opponent){
   if(player.stun>0){ player.stun=Math.max(0,player.stun-dt); player.vx*=0.96; }
-  if(player.punching){ player.punchTimer+=dt; if(player.punchTimer>0.25){player.punching=false; player.punchTimer=0;} }
-  if(player.punching&&player.punchTimer>0.05) resolvePunch(player,opponent);
-  if(player.combo>0) player.comboTimer+=dt; if(player.comboTimer>2){ player.combo=0; player.comboTimer=0; }
-  const maxSpeed=420; if(player.vx>maxSpeed) player.vx=maxSpeed; if(player.vx<-maxSpeed) player.vx=-maxSpeed;
+  if(player.punching){ player.punchTimer+=dt; if(player.punchTimer>0.25){ player.punching=false; player.punchTimer=0; } }
+  if(player.punching && player.punchTimer>0.05) resolvePunch(player,opponent);
+  const maxSpeed=botMode && player===p2? (botDifficulty==='easy'?220:420) : 420;
+  if(player.vx>maxSpeed) player.vx=maxSpeed; if(player.vx<-maxSpeed) player.vx=-maxSpeed;
   applyPhysics(dt,player);
+
+  // combo countdown
+  if(player.comboTimer>0) player.comboTimer-=dt;
+  else player.combo=0;
 }
 
-// Rendering
+/* =========================
+   Rendering
+========================= */
 function render(){
-  const shakeX=(Math.random()*2-1)*shakeAmount; const shakeY=(Math.random()*2-1)*shakeAmount; shakeAmount*=0.92;
-  ctx.save(); ctx.translate(shakeX,shakeY);
   ctx.fillStyle='#0b1220'; ctx.fillRect(0,0,cw,ch);
   ctx.fillStyle='#071128'; ctx.fillRect(0,groundY,cw,ch-groundY);
-  ctx.strokeStyle='rgba(255,255,255,0.02)'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(leftBound,groundY); ctx.lineTo(leftBound,groundY-160); ctx.moveTo(rightBound,groundY); ctx.lineTo(rightBound,groundY-160); ctx.stroke();
   drawStickman(p1); drawStickman(p2);
-  ctx.restore();
-  bar1.style.width=p1.health+'%'; label1.textContent=Math.round(p1.health)+'%';
-  bar2.style.width=p2.health+'%'; label2.textContent=Math.round(p2.health)+'%';
-  bar1.style.background=p1.health<35?'linear-gradient(90deg,#f97316,#ef4444)':'linear-gradient(90deg,var(--hp-win),var(--accent))';
-  bar2.style.background=p2.health<35?'linear-gradient(90deg,#f97316,#ef4444)':'linear-gradient(90deg,var(--accent-2),#f472b6)';
-  // Combo
-  ctx.fillStyle='#ffeb3b'; ctx.font='18px Inter, Arial'; ctx.textAlign='center';
-  if(p1.combo>1) ctx.fillText('+'+p1.combo,p1.x,p1.y-p1.height-40);
-  if(p2.combo>1) ctx.fillText('+'+p2.combo,p2.x,p2.y-p2.height-40);
+
+  bar1.style.width=p1.health+'%';
+  label1.textContent=Math.round(p1.health)+'%';
+  bar2.style.width=p2.health+'%';
+  label2.textContent=Math.round(p2.health)+'%';
+
+  if(p1.health<35) bar1.style.background='linear-gradient(90deg,#f97316,#ef4444)';
+  else bar1.style.background='linear-gradient(90deg,var(--hp-win),var(--accent))';
+  if(p2.health<35) bar2.style.background='linear-gradient(90deg,#f97316,#ef4444)';
+  else bar2.style.background='linear-gradient(90deg,var(--accent-2),#f472b6)';
+
+  // Draw combo text
+  if(p1.combo>1){ ctx.fillStyle='#7dd3fc'; ctx.font='20px Arial'; ctx.fillText('+'+p1.combo,p1.x,p1.y-p1.height-40); }
+  if(p2.combo>1){ ctx.fillStyle='#f472b6'; ctx.font='20px Arial'; ctx.fillText('+'+p2.combo,p2.x,p2.y-p2.height-40); }
 }
 
 function drawStickman(p){
   const r=p.rect();
-  ctx.fillStyle='rgba(0,0,0,0.16)'; ctx.beginPath();
-  ctx.ellipse(p.x,groundY+6,26,8,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,0.16)';
+  ctx.beginPath(); ctx.ellipse(p.x,groundY+6,26,8,0,0,Math.PI*2); ctx.fill();
   const headX=p.x, headY=p.y-p.height+14;
-  ctx.strokeStyle=p.color; ctx.lineWidth=4;
-  ctx.beginPath(); ctx.arc(headX,headY,12,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle=p.color; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(headX,headY,12,0,Math.PI*2); ctx.stroke();
   const torsoTopX=headX, torsoTopY=headY+14, torsoBottomX=headX, torsoBottomY=p.y-18;
   ctx.beginPath(); ctx.moveTo(torsoTopX,torsoTopY); ctx.lineTo(torsoBottomX,torsoBottomY); ctx.stroke();
   const armLen=28, armAngle=p.punching?0.1*p.facing:-0.6;
@@ -300,18 +382,21 @@ function drawStickman(p){
   ctx.beginPath(); ctx.moveTo(torsoBottomX,torsoBottomY); ctx.lineTo(torsoBottomX+18,p.y); ctx.stroke();
   if(p.punching){ const hb=p.punchHitbox(); ctx.fillStyle='rgba(255,255,255,0.04)'; ctx.fillRect(hb.x,hb.y,hb.w,hb.h);}
   ctx.fillStyle='rgba(255,255,255,0.06)'; ctx.fillRect(p.x-36,p.y-p.height-28,72,18);
-  ctx.fillStyle='#cbd5e1'; ctx.font='11px Inter, Arial'; ctx.textAlign='center'; ctx.fillText(p===p1?'P1':'P2',p.x,p.y-p.height-16);
+  ctx.fillStyle='#cbd5e1'; ctx.font='11px Inter, Arial'; ctx.textAlign='center';
+  ctx.fillText(p===p1?'P1':'P2',p.x,p.y-p.height-16);
 }
 
-// Start / Reset / Win
-function startMatch(){ 
-  p1.x=360;p1.y=groundY;p1.vx=p1.vy=0;p1.health=100;p1.stun=0;p1.punching=false;p1.combo=0;p1.comboTimer=0;
-  p2.x=840;p2.y=groundY;p2.vx=p2.vy=0;p2.health=100;p2.stun=0;p2.punching=false;p2.combo=0;p2.comboTimer=0;
-  lastTime=performance.now(); running=true; if(AudioEnabled.val&&!bgNode) bgNode=backgroundDrone(); requestAnimationFrame(update); 
+/* =========================
+   Start / Reset / Win
+========================= */
+function startMatch(){
+  p1.x=360; p1.y=groundY; p1.vx=p1.vy=0; p1.health=100; p1.stun=0; p1.punching=false; p1.combo=0;
+  p2.x=840; p2.y=groundY; p2.vx=p2.vy=0; p2.health=100; p2.stun=0; p2.punching=false; p2.combo=0;
+  lastTime=performance.now(); running=true;
+  if(AudioEnabled.val && !bgNode) bgNode=backgroundDrone();
+  requestAnimationFrame(update);
 }
-
-function resetMatch(){ demoMode=false; botMode=false; overlay.style.display='none'; startMatch(); }
-
+function resetMatch(){ botMode=false; overlay.style.display='none'; startMatch(); }
 function showWin(who){
   overlay.style.display='flex';
   const card=overlay.querySelector('.card');
@@ -328,7 +413,7 @@ function showWin(who){
   document.getElementById('menu').addEventListener('click',()=>{ location.reload(); });
 }
 
-document.addEventListener('visibilitychange',()=>{ if(document.hidden&&bgNode){try{bgNode.osc.stop();}catch(e){} bgNode=null;} });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden && bgNode){ try{ bgNode.osc.stop(); }catch(e){}; bgNode=null; } });
 </script>
 </body>
 </html>
