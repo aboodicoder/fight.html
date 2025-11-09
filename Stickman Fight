@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stickman Duel — 2 Player / Bot</title>
+<title>Stickman Duel — 2 Player / Bot / Spring</title>
 <style>
   :root{
     --bg:#0f1724;
@@ -145,7 +145,6 @@
   </div>
 </div>
 
-<!-- Overlay for start / win -->
 <div id="overlay" class="overlay" style="display:flex">
   <div class="card">
     <div class="title">Stickman Duel</div>
@@ -189,6 +188,7 @@ function playTone(freq,type='sine',length=0.12,gain=0.12,decay=0.02){
 function playPunchSound(){ playTone(600,'square',0.08,0.09,0.02); setTimeout(()=>playTone(420,'sawtooth',0.12,0.06,0.03),10);}
 function playHitSound(){ playTone(160,'sine',0.18,0.15,0.03); setTimeout(()=>playTone(220,'triangle',0.1,0.08,0.02),30);}
 function playWinSound(){ playTone(880,'sine',0.28,0.14,0.04); setTimeout(()=>playTone(1100,'sine',0.22,0.12,0.03),200);}
+function playSpringSound(){ playTone(880,'triangle',0.15,0.15,0.02);}
 function backgroundDrone(){ if(!AudioEnabled.val) return; const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='sine'; o.frequency.value=55; g.gain.value=0.02; o.connect(g); g.connect(audioCtx.destination); o.start(); return {osc:o,gain:g}; }
 let bgNode=null;
 
@@ -214,6 +214,13 @@ class Player{
 const p1=new Player(360,'#7dd3fc',1);
 const p2=new Player(840,'#f472b6',-1);
 let keys={}, lastTime=performance.now(), running=false, demoMode=false, botMode=false, botDifficulty='easy';
+
+/* =========================
+   Spring object
+========================= */
+const spring = {
+  x: cw/2, y: groundY, width: 60, height: 20, active:false, timer:0, maxLift:20
+};
 
 /* =========================
    Input
@@ -258,10 +265,7 @@ function resolvePunch(attacker,defender){
     if(rectIntersect(aHit,dRect) && defender.stun<=0){
       defender.health=Math.max(0,defender.health-8-Math.floor(Math.random()*6));
       defender.vx=attacker.facing*220; defender.vy=-140; defender.stun=0.26;
-      // combo handling
-      attacker.combo++;
-      attacker.comboTimer=1.0;
-      defender.combo=0; defender.comboTimer=0;
+      attacker.combo++; attacker.comboTimer=1.0; defender.combo=0; defender.comboTimer=0;
       playHitSound();
       return true;
     }
@@ -289,131 +293,3 @@ function botAI(controlled,target){
     if(Math.random()<0.005 && controlled.onGround){ controlled.vy=-420; controlled.onGround=false; }
   }
 }
-
-/* =========================
-   Update Loop
-========================= */
-function update(now){
-  const dt=Math.min(0.032,(now-lastTime)/1000);
-  lastTime=now;
-  if(!running) return;
-
-  // Player1 input
-  if(!botMode || demoMode){
-    if(keys['KeyA']) { p1.vx-=1200*dt; p1.facing=-1; }
-    if(keys['KeyD']) { p1.vx+=1200*dt; p1.facing=1; }
-    if(keys['KeyW'] && p1.onGround){ p1.vy=-450; p1.onGround=false; }
-    if(keys['KeyS'] && !p1.punching && p1.stun<=0){ p1.punching=true; p1.punchTimer=0; playPunchSound(); }
-  }
-
-  // Player2 input or bot
-  if(botMode){ botAI(p2,p1); }
-  else {
-    if(keys['ArrowLeft']){ p2.vx-=1200*dt; p2.facing=-1; }
-    if(keys['ArrowRight']){ p2.vx+=1200*dt; p2.facing=1; }
-    if(keys['ArrowUp'] && p2.onGround){ p2.vy=-450; p2.onGround=false; }
-    if(keys['ArrowDown'] && !p2.punching && p2.stun<=0){ p2.punching=true; p2.punchTimer=0; playPunchSound(); }
-  }
-
-  updatePlayer(p1,dt,p2);
-  updatePlayer(p2,dt,p1);
-  render();
-
-  if(p1.health<=0 || p2.health<=0){
-    running=false;
-    setTimeout(()=>showWin(p1.health<=0?'Player 2':'Player 1'),260);
-    if(AudioEnabled.val) playWinSound();
-    if(bgNode){ try{ bgNode.osc.stop(); }catch(e){}; bgNode=null; }
-    return;
-  }
-
-  requestAnimationFrame(update);
-}
-
-function updatePlayer(player,dt,opponent){
-  if(player.stun>0){ player.stun=Math.max(0,player.stun-dt); player.vx*=0.96; }
-  if(player.punching){ player.punchTimer+=dt; if(player.punchTimer>0.25){ player.punching=false; player.punchTimer=0; } }
-  if(player.punching && player.punchTimer>0.05) resolvePunch(player,opponent);
-  const maxSpeed=botMode && player===p2? (botDifficulty==='easy'?220:420) : 420;
-  if(player.vx>maxSpeed) player.vx=maxSpeed; if(player.vx<-maxSpeed) player.vx=-maxSpeed;
-  applyPhysics(dt,player);
-
-  // combo countdown
-  if(player.comboTimer>0) player.comboTimer-=dt;
-  else player.combo=0;
-}
-
-/* =========================
-   Rendering
-========================= */
-function render(){
-  ctx.fillStyle='#0b1220'; ctx.fillRect(0,0,cw,ch);
-  ctx.fillStyle='#071128'; ctx.fillRect(0,groundY,cw,ch-groundY);
-  drawStickman(p1); drawStickman(p2);
-
-  bar1.style.width=p1.health+'%';
-  label1.textContent=Math.round(p1.health)+'%';
-  bar2.style.width=p2.health+'%';
-  label2.textContent=Math.round(p2.health)+'%';
-
-  if(p1.health<35) bar1.style.background='linear-gradient(90deg,#f97316,#ef4444)';
-  else bar1.style.background='linear-gradient(90deg,var(--hp-win),var(--accent))';
-  if(p2.health<35) bar2.style.background='linear-gradient(90deg,#f97316,#ef4444)';
-  else bar2.style.background='linear-gradient(90deg,var(--accent-2),#f472b6)';
-
-  // Draw combo text
-  if(p1.combo>1){ ctx.fillStyle='#7dd3fc'; ctx.font='20px Arial'; ctx.fillText('+'+p1.combo,p1.x,p1.y-p1.height-40); }
-  if(p2.combo>1){ ctx.fillStyle='#f472b6'; ctx.font='20px Arial'; ctx.fillText('+'+p2.combo,p2.x,p2.y-p2.height-40); }
-}
-
-function drawStickman(p){
-  const r=p.rect();
-  ctx.fillStyle='rgba(0,0,0,0.16)';
-  ctx.beginPath(); ctx.ellipse(p.x,groundY+6,26,8,0,0,Math.PI*2); ctx.fill();
-  const headX=p.x, headY=p.y-p.height+14;
-  ctx.strokeStyle=p.color; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(headX,headY,12,0,Math.PI*2); ctx.stroke();
-  const torsoTopX=headX, torsoTopY=headY+14, torsoBottomX=headX, torsoBottomY=p.y-18;
-  ctx.beginPath(); ctx.moveTo(torsoTopX,torsoTopY); ctx.lineTo(torsoBottomX,torsoBottomY); ctx.stroke();
-  const armLen=28, armAngle=p.punching?0.1*p.facing:-0.6;
-  ctx.beginPath(); ctx.moveTo(torsoTopX,torsoTopY+6); ctx.lineTo(torsoTopX-18,torsoTopY+22); ctx.stroke();
-  const arX=torsoTopX+Math.cos(armAngle)*armLen*p.facing, arY=torsoTopY+12+Math.sin(armAngle)*armLen;
-  ctx.beginPath(); ctx.moveTo(torsoTopX,torsoTopY+6); ctx.lineTo(arX,arY); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(torsoBottomX,torsoBottomY); ctx.lineTo(torsoBottomX-14,p.y); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(torsoBottomX,torsoBottomY); ctx.lineTo(torsoBottomX+18,p.y); ctx.stroke();
-  if(p.punching){ const hb=p.punchHitbox(); ctx.fillStyle='rgba(255,255,255,0.04)'; ctx.fillRect(hb.x,hb.y,hb.w,hb.h);}
-  ctx.fillStyle='rgba(255,255,255,0.06)'; ctx.fillRect(p.x-36,p.y-p.height-28,72,18);
-  ctx.fillStyle='#cbd5e1'; ctx.font='11px Inter, Arial'; ctx.textAlign='center';
-  ctx.fillText(p===p1?'P1':'P2',p.x,p.y-p.height-16);
-}
-
-/* =========================
-   Start / Reset / Win
-========================= */
-function startMatch(){
-  p1.x=360; p1.y=groundY; p1.vx=p1.vy=0; p1.health=100; p1.stun=0; p1.punching=false; p1.combo=0;
-  p2.x=840; p2.y=groundY; p2.vx=p2.vy=0; p2.health=100; p2.stun=0; p2.punching=false; p2.combo=0;
-  lastTime=performance.now(); running=true;
-  if(AudioEnabled.val && !bgNode) bgNode=backgroundDrone();
-  requestAnimationFrame(update);
-}
-function resetMatch(){ botMode=false; overlay.style.display='none'; startMatch(); }
-function showWin(who){
-  overlay.style.display='flex';
-  const card=overlay.querySelector('.card');
-  card.innerHTML=`
-    <div class="title">${who} Wins!</div>
-    <div class="small">Nice fight — press Restart to play again.</div>
-    <div style="margin:12px 0;display:flex;gap:10px;justify-content:center">
-      <button id="restart2">Restart</button>
-      <button id="menu">Menu</button>
-    </div>
-    <div class="footer">Built with WebAudio and Canvas — no external assets.</div>
-  `;
-  document.getElementById('restart2').addEventListener('click',()=>{ overlay.style.display='none'; startMatch(); });
-  document.getElementById('menu').addEventListener('click',()=>{ location.reload(); });
-}
-
-document.addEventListener('visibilitychange',()=>{ if(document.hidden && bgNode){ try{ bgNode.osc.stop(); }catch(e){}; bgNode=null; } });
-</script>
-</body>
-</html>
